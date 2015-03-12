@@ -51,7 +51,7 @@ INCLUDES = -I. -I$(HTSDIR)
 # and LICENSE documents to understand license implications.
 ifdef USE_GPL
     CFLAGS += -DUSE_GPL
-    OBJS   += polysomy.o
+    OBJS   += polysomy.o peakfit.o
     LDLIBS  = -lgsl -lcblas
 endif
 
