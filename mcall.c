@@ -1453,12 +1453,12 @@ int mcall(call_t *call, bcf1_t *rec)
         if ( hob != HUGE_VAL ) bcf_update_info_float(call->hdr, rec, "HOB", &hob, 1);
 
         // Quality of a variant site. fabs() to avoid negative zeros in VCF output when CALL_KEEPALT is set
-        rec->qual = call->lk_sum==-HUGE_VAL ? 0 : fabs(-4.343*(call->ref_lk - call->lk_sum));
+        rec->qual = call->lk_sum==-HUGE_VAL || call->ref_lk==0 ? 0 : fabs(-4.343*(call->ref_lk - call->lk_sum));
     }
     else
     {
         // Set the quality of a REF site
-        rec->qual = call->lk_sum==-HUGE_VAL ? 0 : -4.343*log(1 - exp(call->ref_lk - call->lk_sum));
+        rec->qual = call->lk_sum==-HUGE_VAL || call->ref_lk==0 ? 0 : -4.343*log(1 - exp(call->ref_lk - call->lk_sum));
     }
     if ( rec->qual>999 ) rec->qual = 999;
     if ( rec->qual>50 ) rec->qual = rint(rec->qual);
