@@ -127,13 +127,15 @@ int init(int argc, char **argv, bcf_hdr_t *in, bcf_hdr_t *out)
 
 bcf1_t *process(bcf1_t *rec)
 {
+    int mother,father,child;
+    int32_t a,b,c,d,e,f;
+
     args.nrec++;
 
     int ngt = bcf_get_genotypes(args.hdr, rec, &args.gt_arr, &args.ngt_arr);
     if ( ngt<0 ) goto not_applicable;
     if ( ngt!=6 ) goto not_applicable;   // chrX
 
-    int32_t a,b,c,d,e,f;
     a = args.gt_arr[2*args.imother];
     b = args.gt_arr[2*args.imother+1];
     c = args.gt_arr[2*args.ifather];
@@ -144,9 +146,9 @@ bcf1_t *process(bcf1_t *rec)
     if ( bcf_gt_is_missing(c) || bcf_gt_is_missing(d) ) goto not_applicable;
     if ( bcf_gt_is_missing(e) || bcf_gt_is_missing(f) ) goto not_applicable;
 
-    int mother = (1<<bcf_gt_allele(a)) | (1<<bcf_gt_allele(b));
-    int father = (1<<bcf_gt_allele(c)) | (1<<bcf_gt_allele(d));
-    int child  = (1<<bcf_gt_allele(e)) | (1<<bcf_gt_allele(f));
+    mother = (1<<bcf_gt_allele(a)) | (1<<bcf_gt_allele(b));
+    father = (1<<bcf_gt_allele(c)) | (1<<bcf_gt_allele(d));
+    child  = (1<<bcf_gt_allele(e)) | (1<<bcf_gt_allele(f));
 
     if ( (mother&child) && (father&child) ) 
     {
