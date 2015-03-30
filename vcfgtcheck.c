@@ -99,7 +99,7 @@ static void plot_check(args_t *args, char *target_sample, char *query_sample)
             "fig,ax1 = plt.subplots(figsize=(8,5))\n"
             "ax2 = ax1.twinx()\n"
             "plots  = ax1.plot([x[0] for x in dat],'o-', ms=3, color='g', mec='g', label='Discordance (total)')\n"
-            "plots += ax1.plot([x[1] for x in dat], '^', ms=3, color='r', mec='r', label='Discordance (per site)')\n"
+            "plots += ax1.plot([x[1] for x in dat], '^', ms=3, color='r', mec='r', label='Discordance (avg per site)')\n"
             "plots += ax2.plot([x[2] for x in dat],'v', ms=3, color='k', label='Number of sites')\n"
             "if iq!=-1:\n"
             "   ax1.plot([iq],[dat[iq][0]],'o',color='orange', ms=9)\n"
@@ -408,8 +408,18 @@ static void check_gt(args_t *args)
         if ( !fake_pls )
         {
             if ( (npl=bcf_get_format_int32(args->sm_hdr, sm_line, "PL", &args->pl_arr, &args->npl_arr)) <= 0 )
-                error("PL not present at %s:%d?", args->sm_hdr->id[BCF_DT_CTG][sm_line->rid].key, sm_line->pos+1);
-            npl /= bcf_hdr_nsamples(args->sm_hdr);
+            {
+                if ( sm_line->n_allele==1 )
+                {
+                    // PL values may not be present when ALT=. (mpileup/bcftools output), in that case 
+                    // switch automatically to GT at these sites
+                    npl = fake_PLs(args, args->sm_hdr, sm_line);
+                }
+                else
+                    error("PL not present at %s:%d?\n", args->sm_hdr->id[BCF_DT_CTG][sm_line->rid].key, sm_line->pos+1);
+            }
+            else
+                npl /= bcf_hdr_nsamples(args->sm_hdr);
         }
         else
             npl = fake_PLs(args, args->sm_hdr, sm_line);
@@ -486,7 +496,7 @@ static void check_gt(args_t *args)
     for (i=0; i<nsamples; i++) p[i] = &args->lks[i];
     qsort(p, nsamples, sizeof(int*), cmp_doubleptr);
 
-    fprintf(fp, "# [1]CN\t[2]Discordance with %s (total)\t[3]Discordance (score per site)\t[4]Number of sites compared\t[5]Sample\t[6]Sample ID\n", args->sm_hdr->samples[query_isample]);
+    fprintf(fp, "# [1]CN\t[2]Discordance with %s (total)\t[3]Discordance (avg score per site)\t[4]Number of sites compared\t[5]Sample\t[6]Sample ID\n", args->sm_hdr->samples[query_isample]);
     for (i=0; i<nsamples; i++)
     {
         int idx = p[i] - args->lks;
