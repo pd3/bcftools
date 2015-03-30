@@ -36,30 +36,40 @@ BGZIP  = $(HTSDIR)/bgzip
 TABIX  = $(HTSDIR)/tabix
 
 CC       = gcc
+CPPFLAGS =
 CFLAGS   = -g -Wall -Wc++-compat -O2
-DFLAGS   =
+LDFLAGS  =
+LIBS     =
+
 OBJS     = main.o vcfindex.o tabix.o \
            vcfstats.o vcfisec.o vcfmerge.o vcfquery.o vcffilter.o filter.o vcfsom.o \
            vcfnorm.o vcfgtcheck.o vcfview.o vcfannotate.o vcfroh.o vcfconcat.o \
            vcfcall.o mcall.o vcmp.o gvcf.o reheader.o convert.o vcfconvert.o tsv2vcf.o \
            vcfcnv.o HMM.o vcfplugin.o consensus.o ploidy.o version.o \
            ccall.o em.o prob1.o kmin.o # the original samtools calling
-INCLUDES = -I. -I$(HTSDIR)
+
+EXTRA_CPPFLAGS = -I. -I$(HTSDIR) -DPLUGINPATH=\"$(pluginpath)\"
+GSL_LIBS       =
 
 # The polysomy command is not compiled by default because it brings dependency
 # on libgsl. The command can be compiled wth `make USE_GPL=1`. See the INSTALL
 # and LICENSE documents to understand license implications.
 ifdef USE_GPL
-    CFLAGS += -DUSE_GPL
-    OBJS   += polysomy.o
-    LDLIBS  = -lgsl -lcblas
+    EXTRA_CPPFLAGS += -DUSE_GPL
+    OBJS += polysomy.o
+    GSL_LIBS = -lgsl -lcblas
 endif
 
 prefix      = /usr/local
 exec_prefix = $(prefix)
 bindir      = $(exec_prefix)/bin
+libdir      = $(exec_prefix)/lib
+libexecdir  = $(exec_prefix)/libexec
 mandir      = $(prefix)/share/man
 man1dir     = $(mandir)/man1
+
+plugindir   = $(libexecdir)/bcftools
+pluginpath  = $(plugindir)
 
 MKDIR_P = mkdir -p
 INSTALL = install -p
@@ -88,7 +98,7 @@ version.h:
 force:
 
 .c.o:
-	$(CC) -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $< -o $@
+	$(CC) $(CFLAGS) $(EXTRA_CPPFLAGS) $(CPPFLAGS) -c -o $@ $<
 
 test: $(PROG) plugins test/test-rbuf $(BGZIP) $(TABIX)
 	./test/test.pl --exec bgzip=$(BGZIP) --exec tabix=$(TABIX)
@@ -103,7 +113,7 @@ PLUGINS = $(PLUGINC:.c=.so)
 PLUGINM = $(PLUGINC:.c=.mk)
 
 %.so: %.c version.h version.c $(HTSDIR)/libhts.so
-	$(CC) $(CFLAGS) $(INCLUDES) -fPIC -shared -o $@ version.c $< -L$(HTSDIR) -lhts
+	$(CC) -fPIC -shared $(CFLAGS) $(EXTRA_CPPFLAGS) $(CPPFLAGS) -L$(HTSDIR) $(LDFLAGS) -o $@ version.c $< -lhts $(LIBS)
 
 -include $(PLUGINM)
 
@@ -156,10 +166,10 @@ version.o: version.h version.c
 test/test-rbuf.o: test/test-rbuf.c rbuf.h
 
 test/test-rbuf: test/test-rbuf.o
-	$(CC) $(CFLAGS) -o $@ -lm -ldl $<
+	$(CC) $(LDFLAGS) -o $@ $^ -lm -ldl $(LIBS)
 
 bcftools: $(HTSLIB) $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $(OBJS) $(HTSLIB) -lpthread -lz -lm -ldl $(LDLIBS)
+	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(HTSLIB) -lpthread -lz -lm -ldl $(GSL_LIBS) $(LIBS)
 
 doc/bcftools.1: doc/bcftools.txt
 	cd doc && a2x -adate="$(DOC_DATE)" -aversion=$(DOC_VERSION) --doctype manpage --format manpage bcftools.txt
@@ -170,16 +180,18 @@ doc/bcftools.html: doc/bcftools.txt
 docs: doc/bcftools.1 doc/bcftools.html
 
 install: $(PROG) doc/bcftools.1
-	$(INSTALL_DIR) $(DESTDIR)$(bindir) $(DESTDIR)$(man1dir)
+	$(INSTALL_DIR) $(DESTDIR)$(bindir) $(DESTDIR)$(man1dir) $(DESTDIR)$(plugindir)
 	$(INSTALL_PROGRAM) $(PROG) plot-vcfstats vcfutils.pl $(DESTDIR)$(bindir)
 	$(INSTALL_DATA) doc/bcftools.1 $(DESTDIR)$(man1dir)
+	$(INSTALL_PROGRAM) plugins/*.so $(DESTDIR)$(plugindir)
 
 clean: testclean clean-plugins
 	-rm -f gmon.out *.o *~ $(PROG) version.h plugins/*.so plugins/*.P
 	-rm -rf *.dSYM plugins/*.dSYM test/*.dSYM
 
 clean-plugins:
-	-rm -f plugins/*.so plugins/*.P plugins/*.dSYM
+	-rm -f plugins/*.so plugins/*.P
+	-rm -rf plugins/*.dSYM
 
 testclean:
 	-rm -f test/*.o test/*~ $(TEST_PROG)
