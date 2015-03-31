@@ -99,7 +99,7 @@ typedef struct _args_t
     uint32_t *sites;
     int32_t *gt_arr;
     int nsites, msites, ngt_arr, prev_rid;
-    int mode, nstates;
+    int mode, nstates, nhet_father, nhet_mother;
     int imother,ifather,ichild, isample,jsample;
     void (*set_observed_prob) (bcf1_t *rec);
     char *prefix;
@@ -108,6 +108,10 @@ typedef struct _args_t
 args_t;
 
 static args_t args;
+
+#define SW_MOTHER 1
+#define SW_FATHER 2
+static int hap_switch[8][8];
 
 static void set_observed_prob_trio(bcf1_t *rec);
 static void set_observed_prob_unrelated(bcf1_t *rec);
@@ -214,46 +218,64 @@ static void init_hmm_trio(args_t *args)
     args->tprob   = (double*) malloc(sizeof(double)*args->nstates*args->nstates);
 
     for (i=0; i<args->nstates; i++)
+        for (j=0; j<args->nstates; j++) hap_switch[i][j] = 0;
+
+    hap_switch[TRIO_AD][TRIO_AC] = SW_FATHER;
+    hap_switch[TRIO_BC][TRIO_AC] = SW_MOTHER;
+    hap_switch[TRIO_BD][TRIO_AC] = SW_MOTHER | SW_FATHER;
+    hap_switch[TRIO_AC][TRIO_AD] = SW_FATHER;
+    hap_switch[TRIO_BC][TRIO_AD] = SW_MOTHER | SW_FATHER;
+    hap_switch[TRIO_BD][TRIO_AD] = SW_MOTHER;
+    hap_switch[TRIO_AC][TRIO_BC] = SW_MOTHER;
+    hap_switch[TRIO_AD][TRIO_BC] = SW_MOTHER | SW_FATHER;
+    hap_switch[TRIO_BD][TRIO_BC] = SW_FATHER;
+    hap_switch[TRIO_AC][TRIO_BD] = SW_MOTHER | SW_FATHER;
+    hap_switch[TRIO_AD][TRIO_BD] = SW_MOTHER;
+    hap_switch[TRIO_BC][TRIO_BD] = SW_FATHER;
+
+    hap_switch[TRIO_DA][TRIO_CA] = SW_FATHER;
+    hap_switch[TRIO_CB][TRIO_CA] = SW_MOTHER;
+    hap_switch[TRIO_DB][TRIO_CA] = SW_MOTHER | SW_FATHER;
+    hap_switch[TRIO_CA][TRIO_DA] = SW_FATHER;
+    hap_switch[TRIO_CB][TRIO_DA] = SW_MOTHER | SW_FATHER;
+    hap_switch[TRIO_DB][TRIO_DA] = SW_MOTHER;
+    hap_switch[TRIO_CA][TRIO_CB] = SW_MOTHER;
+    hap_switch[TRIO_DA][TRIO_CB] = SW_MOTHER | SW_FATHER;
+    hap_switch[TRIO_DB][TRIO_CB] = SW_FATHER;
+    hap_switch[TRIO_CA][TRIO_DB] = SW_MOTHER | SW_FATHER;
+    hap_switch[TRIO_DA][TRIO_DB] = SW_MOTHER;
+    hap_switch[TRIO_CB][TRIO_DB] = SW_FATHER;
+
+    for (i=0; i<args->nstates; i++)
     {
         for (j=0; j<args->nstates; j++)
-            MAT(args->tprob,args->nstates,i,j) = 0;
+        {
+            if ( !hap_switch[i][j] ) MAT(args->tprob,args->nstates,i,j) = 0;
+            else
+            {
+                MAT(args->tprob,args->nstates,i,j) = 1;
+                if ( hap_switch[i][j] & SW_MOTHER ) MAT(args->tprob,args->nstates,i,j) *= args->pij;
+                if ( hap_switch[i][j] & SW_FATHER ) MAT(args->tprob,args->nstates,i,j) *= args->pij;
+            }
+        }
     }
-
-    MAT(args->tprob,args->nstates,TRIO_AD,TRIO_AC) = args->pij;
-    MAT(args->tprob,args->nstates,TRIO_BC,TRIO_AC) = args->pij;
-    MAT(args->tprob,args->nstates,TRIO_BD,TRIO_AC) = args->pij*args->pij;
-    MAT(args->tprob,args->nstates,TRIO_AC,TRIO_AD) = args->pij;
-    MAT(args->tprob,args->nstates,TRIO_BC,TRIO_AD) = args->pij*args->pij;
-    MAT(args->tprob,args->nstates,TRIO_BD,TRIO_AD) = args->pij;
-    MAT(args->tprob,args->nstates,TRIO_AC,TRIO_BC) = args->pij;
-    MAT(args->tprob,args->nstates,TRIO_AD,TRIO_BC) = args->pij*args->pij;
-    MAT(args->tprob,args->nstates,TRIO_BD,TRIO_BC) = args->pij;
-    MAT(args->tprob,args->nstates,TRIO_AC,TRIO_BD) = args->pij*args->pij;
-    MAT(args->tprob,args->nstates,TRIO_AD,TRIO_BD) = args->pij;
-    MAT(args->tprob,args->nstates,TRIO_BC,TRIO_BD) = args->pij;
-
-    MAT(args->tprob,args->nstates,TRIO_DA,TRIO_CA) = args->pij;
-    MAT(args->tprob,args->nstates,TRIO_CB,TRIO_CA) = args->pij;
-    MAT(args->tprob,args->nstates,TRIO_DB,TRIO_CA) = args->pij*args->pij;
-    MAT(args->tprob,args->nstates,TRIO_CA,TRIO_DA) = args->pij;
-    MAT(args->tprob,args->nstates,TRIO_CB,TRIO_DA) = args->pij*args->pij;
-    MAT(args->tprob,args->nstates,TRIO_DB,TRIO_DA) = args->pij;
-    MAT(args->tprob,args->nstates,TRIO_CA,TRIO_CB) = args->pij;
-    MAT(args->tprob,args->nstates,TRIO_DA,TRIO_CB) = args->pij*args->pij;
-    MAT(args->tprob,args->nstates,TRIO_DB,TRIO_CB) = args->pij;
-    MAT(args->tprob,args->nstates,TRIO_CA,TRIO_DB) = args->pij*args->pij;
-    MAT(args->tprob,args->nstates,TRIO_DA,TRIO_DB) = args->pij;
-    MAT(args->tprob,args->nstates,TRIO_CB,TRIO_DB) = args->pij;
-
     for (i=0; i<args->nstates; i++)
     {
         double sum = 0;
         for (j=0; j<args->nstates; j++)
+        {
             if ( i!=j ) sum += MAT(args->tprob,args->nstates,i,j);
+        }
         MAT(args->tprob,args->nstates,i,i) = 1 - sum;
     }
 
     #if 0
+    for (i=0; i<args->nstates; i++)
+    {
+        for (j=0; j<args->nstates; j++)
+            fprintf(stderr,"\t%d",hap_switch[j][i]);
+        fprintf(stderr,"\n");
+    }
     for (i=0; i<args->nstates; i++)
     {
         for (j=0; j<args->nstates; j++)
@@ -395,6 +417,14 @@ static void set_observed_prob_trio(bcf1_t *rec)
     e = bcf_gt_allele(e);
     f = bcf_gt_allele(f);
 
+    int mother = (1<<a) | (1<<b);
+    int father = (1<<c) | (1<<d);
+    int child  = (1<<e) | (1<<f);
+    if ( !(mother&child) || !(father&child) )  return;      // Mendelian-inconsistent site, skip
+
+    if ( a!=b ) args.nhet_mother++;
+    if ( c!=d ) args.nhet_father++;
+
     int m = args.msites;
     args.nsites++;
     hts_expand(uint32_t,args.nsites,args.msites,args.sites);
@@ -436,11 +466,13 @@ void flush_viterbi(args_t *args)
         if ( !args->fp ) error("%s: %s\n", str.s,strerror(errno));
         free(str.s);
         fprintf(args->fp,"# SG, shared segment\t[2]Chromosome\t[3]Start\t[4]End\t[5]%s:1\t[6]%s:2\n",s2,s2);
+        fprintf(args->fp,"# SW, number of switches\t[3]Sample\t[4]Chromosome\t[5]nHets\t[5]nSwitches\t[6]switch rate\n");
     }
 
     hmm_run_viterbi(args->hmm,args->nsites,args->eprob,args->sites);
     uint8_t *vpath = hmm_get_viterbi_path(args->hmm);
     int i, iprev = -1, prev_state = -1, nstates = hmm_get_nstates(args->hmm);
+    int nswitch_mother = 0, nswitch_father = 0;
     for (i=0; i<args->nsites; i++)
     {
         int state = vpath[i*nstates];
@@ -487,12 +519,19 @@ void flush_viterbi(args_t *args)
                     case TRIO_DB:
                         fprintf(args->fp,"SG\t%s\t%d\t%d\t%s:2\t%s:2\n", chr,start,end,s3,s1); break;
                 }
+                if ( hap_switch[state][prev_state] & SW_MOTHER ) nswitch_mother++;
+                if ( hap_switch[state][prev_state] & SW_FATHER ) nswitch_father++;
             }
             iprev = i-1;
         }
         prev_state = state;
     }
+    float mrate = args->nhet_mother>1 ? (float)nswitch_mother/(args->nhet_mother-1) : 0;
+    float frate = args->nhet_father>1 ? (float)nswitch_father/(args->nhet_father-1) : 0;
+    fprintf(args->fp,"SW\t%s\t%s\t%d\t%d\t%f\n", s1,bcf_hdr_id2name(args->hdr,args->prev_rid),args->nhet_mother,nswitch_mother,mrate);
+    fprintf(args->fp,"SW\t%s\t%s\t%d\t%d\t%f\n", s3,bcf_hdr_id2name(args->hdr,args->prev_rid),args->nhet_father,nswitch_father,frate);
     args->nsites = 0;
+    args->nhet_father = args->nhet_mother = 0;
 }
     
 bcf1_t *process(bcf1_t *rec)
