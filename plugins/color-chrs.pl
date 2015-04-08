@@ -41,7 +41,7 @@ sub parse_params
     {
         #colors => ['red','green','blue','yellow'],
         colors => ['#ff0000','#008000','#0000ff','#ffff00'],
-        height => 500,
+        height => 350,
         pad    => 10,
         dimL   => 300,     # arm length
         dimD   => 10,      # arm width
@@ -145,8 +145,10 @@ sub draw_chr
     my $dimC05 = 0.5*$dimC;
 
     my $xtext = $xpos + $dimD + $dimE*0.5;
-    my $ytext = $ypos - $$opts{pad};
+    my $ytext = $ypos;
     push @$svg, qq[<text text-anchor="middle" x="$xtext" y="$ytext">$chr_name</text>\n];
+
+    $ypos += $$opts{pad};
 
     push @$svg, qq[
         <path d="M$xpos $ypos
