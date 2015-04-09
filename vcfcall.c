@@ -34,10 +34,12 @@ THE SOFTWARE.  */
 #include <stdarg.h>
 #include <htslib/kfunc.h>
 #include <htslib/synced_bcf_reader.h>
+#include <htslib/khash_str2int.h>
 #include <ctype.h>
 #include "bcftools.h"
 #include "call.h"
 #include "prob1.h"
+#include "ploidy.h"
 
 void error(const char *format, ...);
 
@@ -69,9 +71,15 @@ typedef struct
     htsFile *bcf_in, *out_fh;
     char *bcf_fname, *output_fname;
     char **samples;             // for subsampling and ploidy
-    int nsamples, *samples_map;
+    int nsamples, *samples_map; // mapping from output sample names to original VCF
     char *regions, *targets;    // regions to process
     int regions_is_file, targets_is_file;
+
+    char *samples_fname;
+    int samples_is_file;
+    int *sample2sex;    // mapping for ploidy. If negative, interpreted as -1*ploidy
+    int *sex2ploidy, *sex2ploidy_prev, nsex;
+    ploidy_t *ploidy;
 
     bcf1_t *missed_line;
     call_t aux;     // parameters and temporary data
@@ -92,43 +100,31 @@ typedef struct
 }
 args_t;
 
-static family_t *get_family(family_t *fam, int nfam, char *name)
+static char **add_sample(void *name2idx, char **lines, int *nlines, int *mlines, char *name, char sex, int *ith)
 {
-    int i;
-    for (i=0; i<nfam; i++)
-    {
-        if ( !strcmp(fam[i].name, name) ) return &fam[i];
-    }
-    return NULL;
-}
+    int ret = khash_str2int_get(name2idx, name, ith);
+    if ( ret==0 ) return lines;
 
-static char **add_sample(char **sam, int *n, int *m, char *name, int ploidy, int *ith)
-{
-    int i;
-    for (i=0; i<*n; i++)
-    {
-        if ( !strcmp(sam[i], name) )
-        {
-            *ith = i;
-            return sam;
-        }
-    }
-    hts_expand(char*,(*n+1),*m,sam);
+    hts_expand(char*,(*nlines+1),*mlines,lines);
     int len = strlen(name);
-    sam[*n] = (char*) malloc(len+2);
-    memcpy(sam[*n],name,len+1);
-    sam[*n][len+1] = ploidy;
-    *ith = *n;
-    (*n)++;
-    return sam;
+    lines[*nlines] = (char*) malloc(len+3);
+    memcpy(lines[*nlines],name,len);
+    lines[*nlines][len]   = ' ';
+    lines[*nlines][len+1] = sex;
+    lines[*nlines][len+2] = 0;
+    *ith = *nlines;
+    (*nlines)++;
+    khash_str2int_set(name2idx, strdup(name), *ith);
+    return lines;
 }
 
-static char **parse_ped_samples(call_t *call, char **vals, int _n)
+static char **parse_ped_samples(call_t *call, char **vals, int nvals)
 {
-    int i, j, max = 0, n = 0;
+    int i, j, mlines = 0, nlines = 0;
     kstring_t str = {0,0,0};
-    char **sam = NULL;
-    for (i=0; i<_n; i++)
+    void *name2fam = khash_str2int_init(), *name2idx = khash_str2int_init();
+    char **lines = NULL;
+    for (i=0; i<nvals; i++)
     {
         str.l = 0;
         kputs(vals[i], &str);
@@ -149,7 +145,8 @@ static char **parse_ped_samples(call_t *call, char **vals, int _n)
         }
         if ( j!=5 ) break;
 
-        family_t *fam = get_family(call->fams, call->nfams, str.s);
+        int ifam, ret = khash_str2int_get(name2fam, str.s, &ifam);
+        family_t *fam = ret==0 ? &call->fams[ifam] : NULL;
         if ( !fam )
         {
             call->nfams++;
@@ -157,44 +154,41 @@ static char **parse_ped_samples(call_t *call, char **vals, int _n)
             fam = &call->fams[call->nfams-1];
             fam->name = strdup(str.s);
             for (j=0; j<3; j++) fam->sample[j] = -1;
+            khash_str2int_set(name2fam, fam->name, call->nfams-1);
         }
 
-        int ploidy = 2;
-        if ( call->flag & (CALL_CHR_X|CALL_CHR_Y) )
-        {
-            if ( col_ends[3][1]=='1' ) ploidy = 1; // male: one chrX and one chrY copy
-            else
-                ploidy = call->flag & CALL_CHR_X ? 2 : 0; // female: two chrX copies, no chrY
-        }
-        sam = add_sample(sam, &n, &max, col_ends[0]+1, ploidy, &j);
+        char sex = col_ends[3][1]=='1' ? 'M' : 'F';
+        lines = add_sample(name2idx, lines, &nlines, &mlines, col_ends[0]+1, sex, &j);
         if ( strcmp(col_ends[1]+1,"0") )    // father
         {
-            if ( fam->sample[CHILD]>=0 ) error("Multiple childs in %s [%s,%s]\n", str.s, sam[j],sam[fam->sample[CHILD]]);
+            if ( fam->sample[CHILD]>=0 ) error("Multiple childs in %s [%s,%s]\n", str.s, lines[j],lines[fam->sample[CHILD]]);
             fam->sample[CHILD] = j;
             if ( fam->sample[FATHER]>=0 ) error("Two fathers in %s?\n", str.s);
-            sam = add_sample(sam, &n, &max, col_ends[1]+1, call->flag & (CALL_CHR_X|CALL_CHR_Y) ? 1 : 2, &fam->sample[FATHER]);
+            lines = add_sample(name2idx, lines, &nlines, &mlines, col_ends[1]+1, 'M', &fam->sample[FATHER]);
         }
         if ( strcmp(col_ends[2]+1,"0") )    // mother
         {
             if ( fam->sample[MOTHER]>=0 ) error("Two mothers in %s?\n", str.s);
-            sam = add_sample(sam, &n, &max, col_ends[2]+1, call->flag & CALL_CHR_Y ? 0 : 2, &fam->sample[MOTHER]);
+            lines = add_sample(name2idx, lines, &nlines, &mlines, col_ends[2]+1, 'F', &fam->sample[MOTHER]);
         }
     }
     free(str.s);
+    khash_str2int_destroy(name2fam);
+    khash_str2int_destroy_free(name2idx);
 
-    if ( i!=_n ) // not a ped file
+    if ( i!=nvals ) // not a ped file
     {
-        if ( i>0 ) error("Could not parse the samples, thought it was PED format, some rows have 5 columns?!\n");
+        if ( i>0 ) error("Could not parse samples, not a PED format.\n");
         return NULL;
     }
-    assert( n==_n );
+    assert( nlines==nvals );
     for (i=0; i<call->nfams; i++)
         assert( call->fams[i].sample[0]>=0 && call->fams[i].sample[1]>=0 && call->fams[i].sample[2]>=0 ); // multiple childs, not a trio
 
     // for (i=0; i<call->nfams; i++)
-    //     fprintf(stderr,"mother=%s, father=%s, child=%s\n", sam[call->fams[i].sample[MOTHER]],sam[call->fams[i].sample[FATHER]],sam[call->fams[i].sample[CHILD]]);
+    //     fprintf(stderr,"mother=%s, father=%s, child=%s\n", lines[call->fams[i].sample[MOTHER]],lines[call->fams[i].sample[FATHER]],lines[call->fams[i].sample[CHILD]]);
 
-    return sam;
+    return lines;
 }
 
 
@@ -203,44 +197,78 @@ static char **parse_ped_samples(call_t *call, char **vals, int _n)
  *  Alternatively, if no such file exists, the file name is interpreted
  *  as a comma-separated list of samples. When ploidy is not present,
  *  the default ploidy 2 is assumed.
- *
- *  Returns an array of sample names, where the byte value just after \0
- *  indicates the ploidy.
  */
-static char **read_samples(call_t *call, const char *fn, int is_file, int *_n)
+static void set_samples(args_t *args, const char *fn, int is_file)
 {
-    int i, n;
-    char **vals = hts_readlist(fn, is_file, &n);
-    if ( !vals ) error("Could not read the file: %s\n", fn);
+    int i, nlines;
+    char **lines = hts_readlist(fn, is_file, &nlines);
+    if ( !lines ) error("Could not read the file: %s\n", fn);
 
-    char **smpls = parse_ped_samples(call, vals, n);
-    if ( !smpls )
+    char **smpls = parse_ped_samples(&args->aux, lines, nlines);
+    if ( smpls )
     {
-        smpls = (char**) malloc(sizeof(char*)*n);
-        for (i=0; i<n; i++)
-        {
-            char *s = vals[i];
-            while ( *s && !isspace(*s) ) s++;
-            int len = s-vals[i];
-            smpls[i] = (char*) malloc(len+2);
-            strncpy(smpls[i],vals[i],len);
-            smpls[i][len] = 0;
-            while ( *s && isspace(*s) ) s++;
-            int x = 2;
-            if ( *s )
-            {
-                x = (int)s[0] - '0'; // Convert ASCII digit to decimal
-                if (x != 0 && x != 1 && x != 2) error("Ploidy can only be 0, 1 or 2: %s\n", vals[i]);
-            }
-            smpls[i][len+1] = x;
-        }
+        for (i=0; i<nlines; i++) free(lines[i]);
+        free(lines);
+        lines = smpls;
     }
 
-    for (i=0; i<n; i++) free(vals[i]);
-    free(vals);
+    args->samples_map = (int*) malloc(sizeof(int)*bcf_hdr_nsamples(args->aux.hdr)); // for subsetting
+    args->sample2sex  = (int*) malloc(sizeof(int)*bcf_hdr_nsamples(args->aux.hdr));
+    int dflt_sex_id = ploidy_add_sex(args->ploidy, "F");
+    for (i=0; i<bcf_hdr_nsamples(args->aux.hdr); i++) args->sample2sex[i] = dflt_sex_id;
 
-    *_n = n;
-    return smpls;
+    int *old2new = (int*) malloc(sizeof(int)*bcf_hdr_nsamples(args->aux.hdr));
+    for (i=0; i<bcf_hdr_nsamples(args->aux.hdr); i++) old2new[i] = -1;
+
+    int nsmpl = 0, map_needed = 0;
+    for (i=0; i<nlines; i++)
+    {
+        char *ss = lines[i];
+        while ( *ss && isspace(*ss) ) ss++;
+        if ( !*ss ) error("Could not parse: %s\n", lines[i]);
+        if ( *ss=='#' ) continue;
+        char *se = ss;
+        while ( *se && !isspace(*se) ) se++;
+        char x = *se, *xptr = se; *se = 0;
+
+        int ismpl = bcf_hdr_id2int(args->aux.hdr, BCF_DT_SAMPLE, ss);
+        if ( ismpl < 0 ) { fprintf(stderr,"Warning: No such sample in the VCF: %s\n",ss); continue; }
+
+        ss = se+1;
+        while ( *ss && isspace(*ss) ) ss++;
+        if ( !*ss ) ss = "2";   // default ploidy
+        se = ss;
+        while ( *se && !isspace(*se) ) se++;
+        if ( se==ss ) { *xptr = x; error("Could not parse: \"%s\"\n", lines[i]); }
+
+        if ( ss[1]==0 && (ss[0]=='0' || ss[0]=='1' || ss[0]=='2') )
+            args->sample2sex[nsmpl] = -1*(ss[0]-'0');
+        else
+            args->sample2sex[nsmpl] = ploidy_add_sex(args->ploidy, ss);
+
+        if ( ismpl!=nsmpl ) map_needed = 1;
+        args->samples_map[nsmpl] = ismpl;
+        old2new[ismpl] = nsmpl;
+        nsmpl++;
+    }
+
+    for (i=0; i<args->aux.nfams; i++)
+    {
+        int j, nmiss = 0;
+        family_t *fam = &args->aux.fams[i];
+        for (j=0; j<3; j++)
+        {
+            fam->sample[i] = old2new[fam->sample[i]];
+            if ( fam->sample[i]<0 ) nmiss++;
+        }
+        assert( nmiss==0 || nmiss==3 );
+    }
+    free(old2new);
+
+    if ( !map_needed ) { free(args->samples_map); args->samples_map = NULL; }
+
+    args->nsamples = nsmpl;
+    args->samples = lines;
 }
 
 static void init_missed_line(args_t *args)
@@ -302,13 +330,24 @@ static void init_data(args_t *args)
             error("Failed to read the targets: %s\n", args->regions);
     }
 
-    int i;
     if ( !bcf_sr_add_reader(args->aux.srs, args->bcf_fname) ) error("Failed to open %s: %s\n", args->bcf_fname,bcf_sr_strerror(args->aux.srs->errnum));
+    args->aux.hdr = bcf_sr_get_header(args->aux.srs,0);
 
-    if ( args->nsamples && args->nsamples != bcf_hdr_nsamples(args->aux.srs->readers[0].header) )
+    int i;
+    if ( args->samples_fname )
     {
-        args->samples_map = (int *) malloc(sizeof(int)*args->nsamples);
-        args->aux.hdr = bcf_hdr_subset(args->aux.srs->readers[0].header, args->nsamples, args->samples, args->samples_map);
+        set_samples(args, args->samples_fname, args->samples_is_file);
+        args->nsex = ploidy_nsex(args->ploidy);
+        args->sex2ploidy = (int*) calloc(args->nsex,sizeof(int));
+        args->sex2ploidy_prev = (int*) calloc(args->nsex,sizeof(int));
+        args->aux.ploidy = (uint8_t*) malloc(args->nsamples);
+        for (i=0; i<args->nsamples; i++) args->aux.ploidy[i] = 2;
+        for (i=0; i<args->nsex; i++) args->sex2ploidy_prev[i] = 2;
+    }
+
+    if ( args->samples_map )
+    {
+        args->aux.hdr = bcf_hdr_subset(bcf_sr_get_header(args->aux.srs,0), args->nsamples, args->samples, args->samples_map);
         if ( !args->aux.hdr ) error("Error occurred while subsetting samples\n");
         for (i=0; i<args->nsamples; i++)
             if ( args->samples_map[i]<0 ) error("No such sample: %s\n", args->samples[i]);
@@ -316,41 +355,10 @@ static void init_data(args_t *args)
     }
     else
     {
-        args->aux.hdr = bcf_hdr_dup(args->aux.srs->readers[0].header);
+        args->aux.hdr = bcf_hdr_dup(bcf_sr_get_header(args->aux.srs,0));
         for (i=0; i<args->nsamples; i++)
             if ( bcf_hdr_id2int(args->aux.hdr,BCF_DT_SAMPLE,args->samples[i])<0 )
                 error("No such sample: %s\n", args->samples[i]);
-    }
-
-    // Reorder ploidy and family indexes to match mpileup's output and exclude samples which are not available
-    if ( args->aux.ploidy )
-    {
-        for (i=0; i<args->aux.nfams; i++)
-        {
-            int j;
-            for (j=0; j<3; j++)
-            {
-                int k = bcf_hdr_id2int(args->aux.hdr, BCF_DT_SAMPLE, args->samples[ args->aux.fams[i].sample[j] ]);
-                if ( k<0 ) error("No such sample: %s\n", args->samples[ args->aux.fams[i].sample[j] ]);
-                args->aux.fams[i].sample[j] = k;
-            }
-        }
-        uint8_t *ploidy = (uint8_t*) calloc(bcf_hdr_nsamples(args->aux.hdr), 1);
-        for (i=0; i<args->nsamples; i++)    // i index in -s sample list
-        {
-            int j = bcf_hdr_id2int(args->aux.hdr, BCF_DT_SAMPLE, args->samples[i]);     // j index in the output VCF / subset VCF
-            if ( j<0 )
-            {
-                fprintf(stderr,"Warning: no such sample: \"%s\"\n", args->samples[i]);
-                continue;
-            }
-            ploidy[j] = args->aux.ploidy[i];
-        }
-        args->nsamples = bcf_hdr_nsamples(args->aux.hdr);
-        for (i=0; i<args->nsamples; i++)
-            assert( ploidy[i]==0 || ploidy[i]==1 || ploidy[i]==2 );
-        free(args->aux.ploidy);
-        args->aux.ploidy = ploidy;
     }
 
     args->out_fh = hts_open(args->output_fname, hts_bcf_wmode(args->output_type));
@@ -401,10 +409,14 @@ static void destroy_data(args_t *args)
     }
     if ( args->missed_line ) bcf_destroy(args->missed_line);
     if ( args->gvcf.line ) bcf_destroy(args->gvcf.line);
+    ploidy_destroy(args->ploidy);
+    free(args->sex2ploidy);
+    free(args->sex2ploidy_prev);
     free(args->gvcf.gt);
     free(args->gvcf.dp);
     free(args->samples);
     free(args->samples_map);
+    free(args->sample2sex);
     free(args->aux.ploidy);
     bcf_hdr_destroy(args->aux.hdr);
     hts_close(args->out_fh);
@@ -454,6 +466,26 @@ static int parse_format_flag(const char *str)
     return flag;
 }
 
+static void set_ploidy(args_t *args, bcf1_t *rec)
+{
+    ploidy_query(args->ploidy,(char*)bcf_seqname(args->aux.hdr,rec),rec->pos,args->sex2ploidy,NULL,NULL);
+
+    int i;
+    for (i=0; i<args->nsex; i++)
+        if ( args->sex2ploidy[i]!=args->sex2ploidy_prev[i] ) break;
+
+    if ( i==args->nsex ) return;    // ploidy same as previously
+
+    for (i=0; i<args->nsamples; i++)
+    {
+        if ( args->sample2sex[i]<0 )
+            args->aux.ploidy[i] = -1*args->sample2sex[i];
+        else
+            args->aux.ploidy[i] = args->sex2ploidy[args->sample2sex[i]];
+    }
+
+    int *tmp = args->sex2ploidy; args->sex2ploidy = args->sex2ploidy_prev; args->sex2ploidy_prev = tmp;
+}
 
 static void usage(args_t *args)
 {
@@ -468,10 +500,11 @@ static void usage(args_t *args)
     fprintf(stderr, "File format options:\n");
     fprintf(stderr, "   -o, --output <file>             write output to a file [standard output]\n");
     fprintf(stderr, "   -O, --output-type <b|u|z|v>     output type: 'b' compressed BCF; 'u' uncompressed BCF; 'z' compressed VCF; 'v' uncompressed VCF [v]\n");
+    fprintf(stderr, "       --ploidy <file>             space/tab-delimited list of CHROM,FROM,TO,SEX,PLOIDY\n");
     fprintf(stderr, "   -r, --regions <region>          restrict to comma-separated list of regions\n");
     fprintf(stderr, "   -R, --regions-file <file>       restrict to regions listed in a file\n");
     fprintf(stderr, "   -s, --samples <list>            list of samples to include [all samples]\n");
-    fprintf(stderr, "   -S, --samples-file <file>       PED file or a file with optional second column for ploidy (0, 1 or 2) [all samples]\n");
+    fprintf(stderr, "   -S, --samples-file <file>       PED file or a file with an optional column with sex (see man page for details) [all samples]\n");
     fprintf(stderr, "   -t, --targets <region>          similar to -r but streams rather than index-jumps\n");
     fprintf(stderr, "   -T, --targets-file <file>       similar to -R but streams rather than index-jumps\n");
     fprintf(stderr, "\n");
@@ -491,8 +524,6 @@ static void usage(args_t *args)
     fprintf(stderr, "   -n, --novel-rate <float>,[...]  likelihood of novel mutation for constrained trio calling, see man page for details [1e-8,1e-9,1e-9]\n");
     fprintf(stderr, "   -p, --pval-threshold <float>    variant if P(ref|D)<FLOAT with -c [0.5]\n");
     fprintf(stderr, "   -P, --prior <float>             mutation rate (use bigger for greater sensitivity) [1.1e-3]\n");
-    fprintf(stderr, "   -X, --chromosome-X              haploid output for male samples (requires PED file with -s)\n");
-    fprintf(stderr, "   -Y, --chromosome-Y              haploid output for males and skips females (requires PED file with -s)\n");
 
     // todo (and more)
     // fprintf(stderr, "\nContrast calling and association test options:\n");
@@ -506,7 +537,7 @@ static void usage(args_t *args)
 
 int main_vcfcall(int argc, char *argv[])
 {
-    char *samples_fname = NULL;
+    char *ploidy_fname = NULL;
     args_t args;
     memset(&args, 0, sizeof(args_t));
     args.argc = argc; args.argv = argv;
@@ -522,8 +553,7 @@ int main_vcfcall(int argc, char *argv[])
     args.aux.trio_Pm_SNPs = 1 - 1e-8;
     args.aux.trio_Pm_ins  = args.aux.trio_Pm_del  = 1 - 1e-9;
 
-    int i, c, samples_is_file = 0;
-
+    int c;
     static struct option loptions[] =
     {
         {"help",0,0,'h'},
@@ -548,17 +578,17 @@ int main_vcfcall(int argc, char *argv[])
         {"multiallelic-caller",0,0,'m'},
         {"pval-threshold",1,0,'p'},
         {"prior",1,0,'P'},
-        {"chromosome-X",0,0,'X'},
-        {"chromosome-Y",0,0,'Y'},
         {"novel-rate",1,0,'n'},
+        {"ploidy",1,0,1},
         {0,0,0,0}
     };
 
     char *tmp = NULL;
-    while ((c = getopt_long(argc, argv, "h?o:O:r:R:s:S:t:T:ANMV:vcmp:C:XYn:P:f:ig:", loptions, NULL)) >= 0)
+    while ((c = getopt_long(argc, argv, "h?o:O:r:R:s:S:t:T:ANMV:vcmp:C:n:P:f:ig:", loptions, NULL)) >= 0)
     {
         switch (c)
         {
+            case  1 : ploidy_fname = optarg; break;
             case 'g':
                 args.flag |= CF_GVCF;
                 args.gvcf.min_dp = strtol(optarg,&tmp,10);
@@ -586,8 +616,6 @@ int main_vcfcall(int argc, char *argv[])
                       else if ( !strcasecmp(optarg,"trio") ) args.aux.flag |= CALL_CONSTR_TRIO;
                       else error("Unknown argument to -C: \"%s\"\n", optarg);
                       break;
-            case 'X': args.aux.flag |= CALL_CHR_X; break;
-            case 'Y': args.aux.flag |= CALL_CHR_Y; break;
             case 'V':
                       if ( !strcasecmp(optarg,"snps") ) args.flag |= CF_INDEL_ONLY;
                       else if ( !strcasecmp(optarg,"indels") ) args.flag |= CF_NO_INDEL;
@@ -606,8 +634,8 @@ int main_vcfcall(int argc, char *argv[])
             case 'R': args.regions = optarg; args.regions_is_file = 1; break;
             case 't': args.targets = optarg; break;
             case 'T': args.targets = optarg; args.targets_is_file = 1; break;
-            case 's': samples_fname = optarg; break;
-            case 'S': samples_fname = optarg; samples_is_file = 1; break;
+            case 's': args.samples_fname = optarg; break;
+            case 'S': args.samples_fname = optarg; args.samples_is_file = 1; break;
             default: usage(&args);
         }
     }
@@ -619,17 +647,18 @@ int main_vcfcall(int argc, char *argv[])
     else args.bcf_fname = argv[optind++];
 
     // Sanity check options and initialize
-    if ( samples_fname )
+    if ( ploidy_fname ) args.ploidy = ploidy_init(ploidy_fname, 2);
+    else
     {
-        args.samples = read_samples(&args.aux, samples_fname, samples_is_file, &args.nsamples);
-        args.aux.ploidy = (uint8_t*) calloc(args.nsamples+1, 1);
-        args.aux.all_diploid = 1;
-        for (i=0; i<args.nsamples; i++)
-        {
-            args.aux.ploidy[i] = args.samples[i][strlen(args.samples[i]) + 1];
-            if ( args.aux.ploidy[i]!=2 ) args.aux.all_diploid = 0;
-        }
+        args.ploidy = ploidy_init_string(
+                "X 1 60000 M 1\n"
+                "X 2699521 154931043 M 1\n"
+                "Y 1 59373566 M 1\n"
+                "Y 1 59373566 F 0\n"
+                "MT 1 16569 M 1\n"
+                "MT 1 16569 F 1\n", 2);
     }
+    if ( !args.ploidy ) error("Could not initialize ploidy\n");
     if ( args.flag & CF_GVCF )
     {
         // Force some flags to avoid unnecessary branching
@@ -644,7 +673,6 @@ int main_vcfcall(int argc, char *argv[])
         if ( !args.targets ) error("Expected -t or -T with \"-C alleles\"\n");
         if ( !(args.flag & CF_MCALL) ) error("The \"-C alleles\" mode requires -m\n");
     }
-    if ( args.aux.flag & CALL_CHR_X && args.aux.flag & CALL_CHR_Y ) error("Only one of -X or -Y should be given\n");
     if ( args.flag & CF_INS_MISSED && !(args.aux.flag&CALL_CONSTR_ALLELES) ) error("The -i option requires -C alleles\n");
     init_data(&args);
 
@@ -678,6 +706,7 @@ int main_vcfcall(int argc, char *argv[])
         if ( (args.flag & CF_ACGT_ONLY) && (bcf_rec->d.allele[0][0]=='N' || bcf_rec->d.allele[0][0]=='n') ) continue;   // REF[0] is 'N'
 
         bcf_unpack(bcf_rec, BCF_UN_ALL);
+        if ( args.nsex ) set_ploidy(&args, bcf_rec);
 
         // Various output modes: QCall output (todo)
         if ( args.flag & CF_QCALL )

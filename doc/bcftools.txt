@@ -187,12 +187,16 @@ specific commands to see if they apply.
     Comma-separated list of samples to include or exclude if prefixed
     with "&#94;".
 
-*-S, --samples-file* [&#94;]'FILE'::
+*-S, --samples-file* [&#94;]'FILE'[[samples_file]]::
     File of sample names to include or exclude if prefixed with "&#94;".
     One sample per line.
     The command *<<call,bcftools call>>* accepts an optional second
-    column indicating ploidy (0, 1 or 2) and can parse also PED files.
+    column indicating ploidy (0, 1 or 2) or sex (as defined by
+    *<<ploidy,--ploidy>>*, for example "F" or "M"), and can parse also PED
+    files. If the second column is not present,
+    the sex "F" is assumed.
     With *<<call,bcftools call>> -C* 'trio', PED file is expected.
+
 
 *-t, --targets* \[&#94;]'chr'|'chr:pos'|'chr:from-to'|'chr:from-'[,...]::
     Similar as *-r, --regions*, but the next position is accessed by streaming the
@@ -364,10 +368,24 @@ demand. The original calling model can be invoked with the *-c* option.
 *-O, --output-type* 'b'|'u'|'z'|'v'::
     see *<<common_options,Common Options>>*
 
+*--ploidy* 'FILE'[[ploidy]]::
+    ploidy definition given as a space/tab-delimited list of
+    CHROM, FROM, TO, SEX, PLOIDY. The SEX codes are arbitrary and
+    correspond to the ones used by *<<samples_file,--samples-file>>*. Unlisted
+    regions have ploidy 2 and the default ploidy definition is
+----
+    X 1 60000 M 1
+    X 2699521 154931043 M 1
+    Y 1 59373566 M 1
+    Y 1 59373566 F 0
+    MT 1 16569 M 1
+    MT 1 16569 F 1
+----
+
 *-r, --regions* 'chr'|'chr:pos'|'chr:from-to'|'chr:from-'[,...]::
     see *<<common_options,Common Options>>*
 
-*-R, --regions-file* 'file'::
+*-R, --regions-file* 'FILE'::
     see *<<common_options,Common Options>>*
 
 *-s, --samples* 'LIST'::
@@ -449,12 +467,6 @@ demand. The original calling model can be invoked with the *-c* option.
 
 *-t, --targets* 'file'|'chr'|'chr:pos'|'chr:from-to'|'chr:from-'[,...]::
     see *<<common_options,Common Options>>*
-
-*-X, --chromosome-X*::
-    haploid output for male samples (requires PED file with *-s*)
-
-*-Y, --chromosome-Y*::
-    haploid output for males and skips females (requires PED file with *-s*)
 
 
 [[concat]]

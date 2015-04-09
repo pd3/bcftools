@@ -33,8 +33,8 @@ THE SOFTWARE.  */
 #define CALL_VARONLY        (1<<1)
 #define CALL_CONSTR_TRIO    (1<<2)
 #define CALL_CONSTR_ALLELES (1<<3)
-#define CALL_CHR_X          (1<<4)
-#define CALL_CHR_Y          (1<<5)
+//
+//
 #define CALL_FMT_GQ         (1<<6)
 #define CALL_FMT_GP         (1<<7)
 
