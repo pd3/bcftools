@@ -24,13 +24,16 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include "call.h"
 
-void gvcf_write(htsFile *fh, gvcf_t *gvcf, bcf_hdr_t *hdr, bcf1_t *rec, int is_ref)
+bcf1_t *gvcf_write(htsFile *fh, gvcf_t *gvcf, bcf_hdr_t *hdr, bcf1_t *rec, int is_ref)
 {
     int i, ret, nsmpl = bcf_hdr_nsamples(hdr);
+    int can_collapse = is_ref ? 1 : 0;
+    int can_flush = gvcf->rid==-1 ? 0 : 1;
 
-    // Flush gVCF block if chr changed, non-ref call encountered, depth is too
-    // low, or no more records to come
-    if ( rec && is_ref )
+    if ( !rec && !can_flush ) return NULL;
+
+    // Can the record be included in a gVCF block?
+    if ( rec && can_collapse )
     {
         bcf_unpack(rec, BCF_UN_ALL);
 
@@ -41,14 +44,13 @@ void gvcf_write(htsFile *fh, gvcf_t *gvcf, bcf_hdr_t *hdr, bcf1_t *rec, int is_r
             for (i=0; i<nsmpl; i++)
                 if ( gvcf->dp[i] < gvcf->min_dp ) break;
             if ( i<nsmpl )
-            {
-                is_ref = 0;  // the depth is too low
-                rec = NULL;
-            }
+                can_collapse = 0;
         }
     }
 
-    if ( gvcf->rid!=-1 && (!rec || gvcf->rid!=rec->rid || !is_ref || rec->pos > gvcf->end+1) )
+    // Flush gVCF block if there is no more records, chr changed, a gap
+    // encountered, or other conditions not met (block broken by a non-ref or a too low DP)
+    if ( can_flush && (!rec || gvcf->rid!=rec->rid || rec->pos > gvcf->end+1 || !can_collapse) )
     {
         // mpileup can output two records with the same position, SNP and
         // indel. Make sure the end position does not include the non-variant
@@ -65,13 +67,12 @@ void gvcf_write(htsFile *fh, gvcf_t *gvcf, bcf_hdr_t *hdr, bcf1_t *rec, int is_r
         bcf_update_info_int32(hdr, gvcf->line, "END", &gvcf->end, 1);
         bcf_update_genotypes(hdr, gvcf->line, gvcf->gt, nsmpl*2);
         bcf_write1(fh, hdr, gvcf->line);
-
         gvcf->rid = -1;
+
+        if ( !rec ) return NULL;     // just flushing the buffer, last record
     }
 
-    if ( !rec ) return;
-
-    if ( is_ref )
+    if ( can_collapse )
     {
         if ( gvcf->rid==-1 )
         {
@@ -81,9 +82,9 @@ void gvcf_write(htsFile *fh, gvcf_t *gvcf, bcf_hdr_t *hdr, bcf1_t *rec, int is_r
             gvcf->ref[1] = 0;
         }
         gvcf->end = rec->pos;
-        return;
+        return NULL;
     }
 
-    bcf_write1(fh, hdr, rec);
+    return rec;
 }
 

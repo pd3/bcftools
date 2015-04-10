@@ -659,12 +659,6 @@ int main_vcfcall(int argc, char *argv[])
                 "MT 1 16569 F 1\n", 2);
     }
     if ( !args.ploidy ) error("Could not initialize ploidy\n");
-    if ( args.flag & CF_GVCF )
-    {
-        // Force some flags to avoid unnecessary branching
-        args.aux.flag &= ~CALL_KEEPALT;
-        args.aux.flag |= CALL_VARONLY;
-    }
     if ( (args.flag & CF_CCALL ? 1 : 0) + (args.flag & CF_MCALL ? 1 : 0) + (args.flag & CF_QCALL ? 1 : 0) > 1 ) error("Only one of -c or -m options can be given\n");
     if ( !(args.flag & CF_CCALL) && !(args.flag & CF_MCALL) && !(args.flag & CF_QCALL) ) error("Expected -c or -m option\n");
     if ( args.aux.n_perm && args.aux.ngrp1_samples<=0 ) error("Expected -1 with -U\n");    // not sure about this, please fix
@@ -683,9 +677,9 @@ int main_vcfcall(int argc, char *argv[])
         bcf_unpack(bcf_rec, BCF_UN_STR);
 
         // Skip unwanted sites
-        if ( args.aux.flag & CALL_VARONLY )
+        int is_ref = 0;
+        if ( args.aux.flag & CALL_VARONLY || args.flag & CF_GVCF )
         {
-            int is_ref = 0;
             if ( bcf_rec->n_allele==1 ) is_ref = 1;     // not a variant
             else if ( bcf_rec->n_allele==2 )
             {
@@ -696,9 +690,11 @@ int main_vcfcall(int argc, char *argv[])
             }
             if ( is_ref )
             {
+                if ( !(args.flag & CF_GVCF) ) continue;
+
                 // gVCF output
-                if ( args.flag & CF_GVCF ) gvcf_write(args.out_fh, &args.gvcf, args.aux.hdr, bcf_rec, 1);
-                continue;
+                bcf_rec = gvcf_write(args.out_fh, &args.gvcf, args.aux.hdr, bcf_rec, 1);
+                if ( !bcf_rec ) continue;
             }
         }
         if ( (args.flag & CF_INDEL_ONLY) && bcf_is_snp(bcf_rec) ) continue;    // not an indel
@@ -724,10 +720,10 @@ int main_vcfcall(int argc, char *argv[])
         if ( ret==-1 ) error("Something is wrong\n");
 
         // gVCF output
-        if ( args.flag & CF_GVCF )
+        if ( args.flag & CF_GVCF && !is_ref )
         {
-            gvcf_write(args.out_fh, &args.gvcf, args.aux.hdr, bcf_rec, ret?0:1);
-            continue;
+            bcf_rec = gvcf_write(args.out_fh, &args.gvcf, args.aux.hdr, bcf_rec, ret?0:1);
+            if ( !bcf_rec ) continue;
         }
 
         // Normal output

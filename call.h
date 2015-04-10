@@ -130,7 +130,7 @@ void call_init_pl2p(call_t *call);
 uint32_t *call_trio_prep(int is_x, int is_son);
 
 /** gVCF */
-void gvcf_write(htsFile *fh, gvcf_t *gvcf, bcf_hdr_t *hdr, bcf1_t *rec, int is_ref);
+bcf1_t *gvcf_write(htsFile *fh, gvcf_t *gvcf, bcf_hdr_t *hdr, bcf1_t *rec, int is_ref);
 
 void init_allele_trimming_maps(call_t *call, int als, int nals);
 void mcall_trim_numberR(call_t *call, bcf1_t *rec, int nals, int nout_als, int out_als);
