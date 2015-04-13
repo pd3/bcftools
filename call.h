@@ -51,7 +51,8 @@ family_t;
 
 typedef struct
 {
-    int min_dp, mdp;    // minimum per-sample depth of a gVCF block
+    int *dp_range, ndp_range, prev_range;   // per-sample depth ranges
+    int mdp;                    // allocated size of the dp array
     int32_t rid, start, end, *gt, *dp;
     char ref[2];        // reference base at start position
     bcf1_t *line;
@@ -96,7 +97,7 @@ typedef struct
     bcf1_t *rec;
     bcf_hdr_t *hdr;
     uint32_t flag;          // One or more of the CALL_* flags defined above
-    uint8_t *ploidy, all_diploid;
+    uint8_t *ploidy, all_diploid, unseen;
 
     double pl2p[256];       // PL to 10^(-PL/10) table
     int32_t *PLs;           // VCF PL likelihoods (rw)
@@ -130,6 +131,7 @@ void call_init_pl2p(call_t *call);
 uint32_t *call_trio_prep(int is_x, int is_son);
 
 /** gVCF */
+int gvcf_init(gvcf_t *gvcf, const char *dp_ranges);
 bcf1_t *gvcf_write(htsFile *fh, gvcf_t *gvcf, bcf_hdr_t *hdr, bcf1_t *rec, int is_ref);
 
 void init_allele_trimming_maps(call_t *call, int als, int nals);

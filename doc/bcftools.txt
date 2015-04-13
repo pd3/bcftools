@@ -1114,10 +1114,13 @@ performance of indel calling.
 
 ==== Output options
 
-*-g, --BCF*::
-    Compute  genotype likelihoods and output them in the binary call format
-    (BCF).  This is BCF2 which is incompatible with the BCF1 format produced by
-    previous (0.1.x) versions of samtools.
+*--gvcf* 'INT'[,...]::
+    output gVCF blocks of homozygous REF calls, with DP ranges given as the
+    list of integers. For example, passing '5,15' will group sites into two
+    types of gVCF blocks, the first with minimum per-sample coverage from the interval
+    [5,15) and the latter with the minimum coverage 15 or bigger. In this
+    example, sites with minimum per-sample coverage smaller than 5 will be
+    printed as separate records, outside of gVCF blocks.
 
 *-o, --output* 'FILE'::
     Write pileup or VCF/BCF output to 'FILE', rather than the default of standard output.
@@ -1127,6 +1130,9 @@ performance of indel calling.
     will take care of this, but to write to an entirely numeric filename use *-o
     ./123* or *--output 123*.)
 
+*-O, --output-type* 'b'|'u'|'z'|'v'::
+    see *<<common_options,Common Options>>*
+
 *-t, --output-tags* 'LIST'::
     Comma-separated list of FORMAT and INFO tags to output (case-insensitive):
     *DP* (Number of high-quality bases, FORMAT), *DV* (Number of high-quality
@@ -1135,13 +1141,6 @@ performance of indel calling.
     each observed allele, INFO), *DP4* (Number of high-quality ref- forward,
     ref-reverse, alt-forward and alt-reverse bases, FORMAT), *SP* (Phred-scaled
     strand bias P-value, FORMAT)
-
-*-u, --uncompressed*::
-    Generate uncompressed VCF/BCF output, which is preferred for piping.
-
-*-v, --VCF*::
-    Compute genotype likelihoods and output them in the variant call format
-    (VCF). Output is bgzip-compressed VCF unless *-u* option is set.
 
 ==== Options for SNP/INDEL genotype likelihood computation
 

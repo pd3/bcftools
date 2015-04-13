@@ -24,11 +24,38 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include "call.h"
 
+int gvcf_init(gvcf_t *gvcf, const char *dp_ranges)
+{
+    int n = 1;
+    const char *ss = dp_ranges;
+    while ( *ss )
+    {
+        if ( *ss==',' ) n++;
+        ss++;
+    }
+    gvcf->ndp_range  = n;
+    gvcf->dp_range   = (int*) malloc(sizeof(int)*gvcf->ndp_range);
+
+    n  = 0;
+    ss = dp_ranges;
+    while ( *ss )
+    {
+        const char *se = ss;
+        gvcf->dp_range[n++] = strtol(ss,&se,10);
+        if ( se==ss ) return -1;
+        if ( *se==',' ) ss = se+1;
+        else if ( !*se ) break;
+        return -1;
+    }
+    return 0;
+}
+
 bcf1_t *gvcf_write(htsFile *fh, gvcf_t *gvcf, bcf_hdr_t *hdr, bcf1_t *rec, int is_ref)
 {
     int i, ret, nsmpl = bcf_hdr_nsamples(hdr);
     int can_collapse = is_ref ? 1 : 0;
     int can_flush = gvcf->rid==-1 ? 0 : 1;
+    int dp_range = 0;
 
     if ( !rec && !can_flush ) return NULL;
 
@@ -41,10 +68,20 @@ bcf1_t *gvcf_write(htsFile *fh, gvcf_t *gvcf, bcf_hdr_t *hdr, bcf1_t *rec, int i
         ret = bcf_get_format_int32(hdr, rec, "DP", &gvcf->dp, &gvcf->mdp);
         if ( ret==nsmpl )
         {
-            for (i=0; i<nsmpl; i++)
-                if ( gvcf->dp[i] < gvcf->min_dp ) break;
-            if ( i<nsmpl )
+            int min_dp = gvcf->dp[i];
+            for (i=1; i<nsmpl; i++)
+                if ( min_dp > gvcf->dp[i] ) min_dp = gvcf->dp[i];
+
+            for (i=0; i<gvcf->ndp_range; i++)
+                if ( min_dp < gvcf->dp_range[i] ) break;
+
+            dp_range = i;
+
+            if ( dp_range==0 )
                 can_collapse = 0;
+            else if ( gvcf->prev_range != dp_range )
+                can_collapse = 0;
+
         }
     }
 
@@ -58,7 +95,7 @@ bcf1_t *gvcf_write(htsFile *fh, gvcf_t *gvcf, bcf_hdr_t *hdr, bcf1_t *rec, int i
         if ( rec && rec->rid==gvcf->rid && rec->pos==gvcf->end ) gvcf->end--;
 
         gvcf->end++;    // from 0-based to 1-based coordinate
-
+..
         bcf_clear1(gvcf->line);
         gvcf->line->rid  = gvcf->rid;
         gvcf->line->pos  = gvcf->start;

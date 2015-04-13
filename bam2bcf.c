@@ -719,7 +719,7 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
         {
             if (bc->a[i] < 0) break;
             kputc(',', &bc->tmp);
-            if ( bc->unseen==i ) kputs("<X>", &bc->tmp);
+            if ( bc->unseen==i ) kputs("<*>", &bc->tmp);
             else kputc("ACGT"[bc->a[i]], &bc->tmp);
             nals++;
         }

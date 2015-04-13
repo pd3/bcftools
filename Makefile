@@ -173,6 +173,7 @@ vcmp.o: vcmp.c $(htslib_hts_h) vcmp.h
 polysomy.o: polysomy.c $(htslib_hts_h)
 consensus.o: consensus.c $(htslib_hts_h) $(HTSDIR)/htslib/kseq.h rbuf.h $(bcftools_h) $(HTSDIR)/htslib/regidx.h
 version.o: version.h version.c
+mpileup.o: mpileup.c $(HTSDIR)/htslib/regidx.h
 
 test/test-rbuf.o: test/test-rbuf.c rbuf.h
 

@@ -119,7 +119,8 @@ test_vcf_view($opts,in=>'view.minmaxac',out=>'view.minmaxac.1.out',args=>q[-H -q
 test_vcf_call($opts,in=>'mpileup',out=>'mpileup.1.out',args=>'-mv');
 test_vcf_call($opts,in=>'mpileup',out=>'mpileup.2.out',args=>'-mvg0');
 test_vcf_call_cAls($opts,in=>'mpileup',out=>'mpileup.cAls.out',tab=>'mpileup');
-test_mpileup($opts,out=>'mpileup.3.out',args=>q[-uv -t DP,DV -r17:100-600]);
+test_mpileup($opts,out=>'mpileup.3.out',args=>q[-t DP,DV -r17:100-600]);
+test_mpileup($opts,out=>'mpileup.4.out',args=>q[-t DP,DV -r17:100-600 --gvcf 3]);
 test_vcf_filter($opts,in=>'filter.1',out=>'filter.1.out',args=>'-mx -g2 -G2');
 test_vcf_filter($opts,in=>'filter.2',out=>'filter.2.out',args=>q[-e'QUAL==59.2 || (INDEL=0 & (FMT/GQ=25 | FMT/DP=10))' -sModified -S.]);
 test_vcf_filter($opts,in=>'filter.3',out=>'filter.3.out',args=>q[-e'DP=19'],fmt=>'%POS\\t%FILTER\\t%DP[\\t%GT]\\n');
@@ -778,7 +779,9 @@ sub test_mpileup
         my @files = ();
         for my $file ('1', '2', '3') { push @files, "$$opts{path}/mpileup/$file.$fmt"; }
         my $files = join(' ',@files);
-        test_cmd($opts,%args,cmd=>"$$opts{bin}/bcftools mpileup $args{args} -f $$opts{path}/mpileup/ref.fa $files | grep -v ^##mpileup | grep -v ^##reference");
+        my $grep_hdr = "grep -v ^##bcftools | grep -v ^##mpileup | grep -v ^##reference";
+        test_cmd($opts,%args,cmd=>"$$opts{bin}/bcftools mpileup $args{args} -f $$opts{path}/mpileup/ref.fa $files | $grep_hdr");
+        test_cmd($opts,%args,cmd=>"$$opts{bin}/bcftools mpileup $args{args} -f $$opts{path}/mpileup/ref.fa -Ob $files | $$opts{bin}/bcftools view  | $grep_hdr");
     }
 }
 

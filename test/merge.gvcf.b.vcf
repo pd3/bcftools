@@ -1,0 +1,42 @@
+##fileformat=VCFv4.2
+##FILTER=<ID=PASS,Description="All filters passed">
+##reference=file:///lustre/scratch105/projects/g1k/ref/main_project/human_g1k_v37.fasta
+##contig=<ID=1,length=249250621>
+##FORMAT=<ID=PL,Number=G,Type=Integer,Description="List of Phred-scaled genotype likelihoods">
+##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Number of high-quality bases">
+##FORMAT=<ID=DV,Number=1,Type=Integer,Description="Number of high-quality non-reference bases">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##INFO=<ID=END,Number=1,Type=Integer,Description="End position of the variant described in this record">
+##bcftools_annotateVersion=1.2-43-g66d7e4c-dirty+htslib-1.2.1-50-g66e5ef4
+##bcftools_annotateCommand=annotate -x ^INFO/END test/merge.gvcf.b.vcf
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	bbb
+1	900110	.	G	.	.	.	END=900110	GT	0/0
+1	900124	.	GC	GCC	4.7751	.	.	GT:PL:DP:DV	1/1:30,6,0:2:2
+1	900126	.	G	.	.	.	END=900168	GT	0/0
+1	900169	.	C	T	31.3382	.	.	GT:PL:DP:DV	0/1:64,0,86:6:3
+1	900170	.	G	.	.	.	END=900187	GT	0/0
+1	900190	.	G	.	.	.	END=900198	GT	0/0
+1	900199	.	CG	C	8.39688	.	.	GT:PL:DP:DV	0/1:41,0,102:6:2
+1	900200	.	G	.	.	.	END=900207	GT	0/0
+1	900208	.	G	A	143	.	.	GT:PL:DP:DV	0/1:176,0,143:16:9
+1	900209	.	C	.	.	.	END=900284	GT	0/0
+1	900285	.	C	T	78	.	.	GT:PL:DP:DV	0/1:112,0,255:23:7
+1	900286	.	A	G	228	.	.	GT:PL:DP:DV	1/1:255,75,0:25:25
+1	900287	.	G	.	.	.	END=900438	GT	0/0
+1	900439	.	G	A	186	.	.	GT:PL:DP:DV	0/1:219,0,255:28:11
+1	900440	.	A	.	.	.	END=900678	GT	0/0
+1	900679	.	A	G	222	.	.	GT:PL:DP:DV	0/1:255,0,255:40:18
+1	900680	.	T	.	.	.	END=900729	GT	0/0
+1	900730	.	G	A	222	.	.	GT:PL:DP:DV	0/1:255,0,212:27:16
+1	900731	.	G	.	.	.	END=900971	GT	0/0
+1	900972	.	T	G	228	.	.	GT:PL:DP:DV	1/1:255,123,0:41:41
+1	900973	.	T	.	.	.	END=901022	GT	0/0
+1	901023	.	T	C	228	.	.	GT:PL:DP:DV	1/1:255,120,0:40:40
+1	901024	.	G	.	.	.	END=901045	GT	0/0
+1	901046	.	ACCCC	ACC	222	.	.	GT:PL:DP:DV	0/1:255,0,255:35:22
+1	901047	.	C	.	.	.	END=901112	GT	0/0
+1	901113	.	T	C	196	.	.	GT:PL:DP:DV	0/1:229,0,255:26:10
+1	901114	.	C	.	.	.	END=901336	GT	0/0
+1	901337	.	T	G	222	.	.	GT:PL:DP:DV	0/1:255,0,255:31:16
+1	901338	.	C	.	.	.	END=901606	GT	0/0
+1	901607	.	C	G	222	.	.	GT:PL:DP:DV	0/1:255,0,192:34:23

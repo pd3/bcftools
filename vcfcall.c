@@ -677,29 +677,39 @@ int main_vcfcall(int argc, char *argv[])
         bcf_unpack(bcf_rec, BCF_UN_STR);
 
         // Skip unwanted sites
-        int is_ref = 0;
-        if ( args.aux.flag & CALL_VARONLY || args.flag & CF_GVCF )
-        {
-            if ( bcf_rec->n_allele==1 ) is_ref = 1;     // not a variant
-            else if ( bcf_rec->n_allele==2 )
-            {
-                // second allele is mpileup's X, not a variant
-                if ( bcf_rec->d.allele[1][0]=='X' ) is_ref = 1;
-                else if ( bcf_rec->d.allele[1][0]=='<' && bcf_rec->d.allele[1][1]=='X' && bcf_rec->d.allele[1][2]=='>' ) is_ref = 1;
-                else if ( bcf_rec->d.allele[1][0]=='<' && bcf_rec->d.allele[1][1]=='*' && bcf_rec->d.allele[1][2]=='>' ) is_ref = 1;
-            }
-            if ( is_ref )
-            {
-                if ( !(args.flag & CF_GVCF) ) continue;
+        int i, is_indel = bcf_is_snp(bcf_rec) ? 0 : 1;
+        if ( (args.flag & CF_INDEL_ONLY) && !is_indel ) continue;
+        if ( (args.flag & CF_NO_INDEL) && is_indel ) continue;
+        if ( (args.flag & CF_ACGT_ONLY) && (bcf_rec->d.allele[0][0]=='N' || bcf_rec->d.allele[0][0]=='n') ) continue;   // REF[0] is 'N'
 
-                // gVCF output
-                bcf_rec = gvcf_write(args.out_fh, &args.gvcf, args.aux.hdr, bcf_rec, 1);
-                if ( !bcf_rec ) continue;
+        // Which allele is symbolic? All SNPs should have it, but not indels
+        args.aux.unseen = 0;
+        for (i=1; i<bcf_rec->n_allele; i++)
+        {
+            if ( bcf_rec->d.allele[i][0]=='X' ) { args.aux.unseen = i; break; }  // old X
+            if ( bcf_rec->d.allele[i][0]=='<' )
+            {
+                if ( bcf_rec->d.allele[i][1]=='X' && bcf_rec->d.allele[i][2]=='>' ) { args.aux.unseen = i; break; } // old <X>
+                if ( bcf_rec->d.allele[i][1]=='*' && bcf_rec->d.allele[i][2]=='>' ) { args.aux.unseen = i; break; } // new <*>
             }
         }
-        if ( (args.flag & CF_INDEL_ONLY) && bcf_is_snp(bcf_rec) ) continue;    // not an indel
-        if ( (args.flag & CF_NO_INDEL) && !bcf_is_snp(bcf_rec) ) continue;     // not a SNP
-        if ( (args.flag & CF_ACGT_ONLY) && (bcf_rec->d.allele[0][0]=='N' || bcf_rec->d.allele[0][0]=='n') ) continue;   // REF[0] is 'N'
+        int is_ref = (bcf_rec->n_allele==1 || (bcf_rec->n_allele==2 && args.aux.unseen>0)) ? 1 : 0;
+
+        if ( !args.aux.unseen && !is_indel )
+        {
+            // No symbolic <*> allele, the site cannot be called. Print it as it is or skip if -v was given.
+            if ( !(args.aux.flag & CALL_VARONLY) || !is_ref ) bcf_write1(args.out_fh, args.aux.hdr, bcf_rec);
+            continue;
+        }
+        else if ( is_ref )
+        {
+            if ( args.flag & CF_GVCF )
+            {
+                bcf_rec = gvcf_write(args.out_fh, &args.gvcf, args.aux.hdr, bcf_rec, 1);
+                if ( !bcf_rec || args.aux.flag&CALL_VARONLY ) continue;
+            }
+            else if ( args.aux.flag&CALL_VARONLY )  continue;
+        }
 
         bcf_unpack(bcf_rec, BCF_UN_ALL);
         if ( args.nsex ) set_ploidy(&args, bcf_rec);
@@ -719,7 +729,7 @@ int main_vcfcall(int argc, char *argv[])
             ret = ccall(&args.aux, bcf_rec);
         if ( ret==-1 ) error("Something is wrong\n");
 
-        // gVCF output
+        // gVCF output. If is_ref is set, the record has been already processed
         if ( args.flag & CF_GVCF && !is_ref )
         {
             bcf_rec = gvcf_write(args.out_fh, &args.gvcf, args.aux.hdr, bcf_rec, ret?0:1);

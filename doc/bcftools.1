@@ -2,12 +2,12 @@
 .\"     Title: bcftools
 .\"    Author: [see the "AUTHORS" section]
 .\" Generator: DocBook XSL Stylesheets v1.76.1 <http://docbook.sf.net/>
-.\"      Date: 2015-04-10 11:32 BST
+.\"      Date: 2015-04-10 12:56 BST
 .\"    Manual: \ \&
 .\"    Source: \ \&
 .\"  Language: English
 .\"
-.TH "BCFTOOLS" "1" "2015\-04\-10 11:32 BST" "\ \&" "\ \&"
+.TH "BCFTOOLS" "1" "2015\-04\-10 12:56 BST" "\ \&" "\ \&"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -41,7 +41,7 @@ Most commands accept VCF, bgzipped VCF and BCF with filetype detected automatica
 BCFtools is designed to work on a stream\&. It regards an input file "\-" as the standard input (stdin) and outputs to the standard output (stdout)\&. Several commands can thus be combined with Unix pipes\&.
 .SS "VERSION"
 .sp
-This manual page was last updated \fB2015\-04\-10 11:32 BST\fR and refers to bcftools git version \fB1\&.2\-46\-g0248ff8+\fR\&.
+This manual page was last updated \fB2015\-04\-10 12:56 BST\fR and refers to bcftools git version \fB1\&.2\-47\-gd7a93f5+\fR\&.
 .SS "BCF1"
 .sp
 The BCF1 format output by versions of samtools <= 0\&.1\&.19 is \fBnot\fR compatible with this version of bcftools\&. To read BCF1 files one can use the view command from old versions of bcftools packaged with samtools versions <= 0\&.1\&.19 to convert to VCF, which can then be read by this version of bcftools\&.
@@ -1899,9 +1899,11 @@ Disable read\-pair overlap detection\&.
 \fBOutput options\fR
 .RS 4
 .PP
-\fB\-g, \-\-BCF\fR
+\fB\-\-gvcf\fR \fIINT\fR
 .RS 4
-Compute genotype likelihoods and output them in the binary call format (BCF)\&. This is BCF2 which is incompatible with the BCF1 format produced by previous (0\&.1\&.x) versions of samtools\&.
+output gVCF blocks of homozygous REF calls\&. The parameter
+\fIINT\fR
+is the minimum per\-sample depth required to include a site in the non\-variant block\&.
 .RE
 .PP
 \fB\-o, \-\-output\fR \fIFILE\fR
@@ -1916,6 +1918,12 @@ and
 \fB\-o \&./123\fR
 or
 \fB\-\-output 123\fR\&.)
+.RE
+.PP
+\fB\-O, \-\-output\-type\fR \fIb\fR|\fIu\fR|\fIz\fR|\fIv\fR
+.RS 4
+see
+\fBCommon Options\fR
 .RE
 .PP
 \fB\-t, \-\-output\-tags\fR \fILIST\fR
@@ -1933,18 +1941,6 @@ Comma\-separated list of FORMAT and INFO tags to output (case\-insensitive):
 (Number of high\-quality ref\- forward, ref\-reverse, alt\-forward and alt\-reverse bases, FORMAT),
 \fBSP\fR
 (Phred\-scaled strand bias P\-value, FORMAT)
-.RE
-.PP
-\fB\-u, \-\-uncompressed\fR
-.RS 4
-Generate uncompressed VCF/BCF output, which is preferred for piping\&.
-.RE
-.PP
-\fB\-v, \-\-VCF\fR
-.RS 4
-Compute genotype likelihoods and output them in the variant call format (VCF)\&. Output is bgzip\-compressed VCF unless
-\fB\-u\fR
-option is set\&.
 .RE
 .RE
 .sp

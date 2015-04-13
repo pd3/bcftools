@@ -1,0 +1,32 @@
+##fileformat=VCFv4.2
+##FILTER=<ID=PASS,Description="All filters passed">
+##reference=file:///lustre/scratch105/projects/g1k/ref/main_project/human_g1k_v37.fasta
+##contig=<ID=1,length=249250621>
+##FORMAT=<ID=PL,Number=G,Type=Integer,Description="List of Phred-scaled genotype likelihoods">
+##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Number of high-quality bases">
+##FORMAT=<ID=DV,Number=1,Type=Integer,Description="Number of high-quality non-reference bases">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##INFO=<ID=END,Number=1,Type=Integer,Description="End position of the variant described in this record">
+##bcftools_annotateVersion=1.2-43-g66d7e4c-dirty+htslib-1.2.1-50-g66e5ef4
+##bcftools_annotateCommand=annotate -x ^INFO/END test/merge.gvcf.a.vcf
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	aaa
+1	900110	.	G	.	.	.	END=900110	GT	0/0
+1	900115	.	G	.	.	.	END=900115	GT	0/0
+1	900117	.	G	.	.	.	END=900122	GT	0/0
+1	900124	.	G	.	.	.	END=900128	GT	0/0
+1	900130	.	C	.	.	.	END=900135	GT	0/0
+1	900137	.	G	.	.	.	END=900284	GT	0/0
+1	900285	.	C	T	228	.	.	GT:PL:DP:DV	1/1:255,54,0:18:18
+1	900286	.	A	G	228	.	.	GT:PL:DP:DV	1/1:255,57,0:19:19
+1	900287	.	G	.	.	.	END=900716	GT	0/0
+1	900717	.	CTTATTTATT	CTTATT	228	.	.	GT:PL:DP:DV	1/1:255,84,0:28:28
+1	900727	.	G	.	.	.	END=900729	GT	0/0
+1	900730	.	G	A	228	.	.	GT:PL:DP:DV	1/1:255,81,0:27:27
+1	900731	.	G	.	.	.	END=900971	GT	0/0
+1	900972	.	T	G	228	.	.	GT:PL:DP:DV	1/1:255,117,0:39:39
+1	900973	.	T	.	.	.	END=901022	GT	0/0
+1	901023	.	T	C	228	.	.	GT:PL:DP:DV	1/1:255,99,0:33:33
+1	901024	.	G	.	.	.	END=901558	GT	0/0
+1	901559	.	G	A	228	.	.	GT:PL:DP:DV	1/1:255,84,0:28:28
+1	901560	.	G	.	.	.	END=901606	GT	0/0
+1	901607	.	C	G	228	.	.	GT:PL:DP:DV	1/1:255,75,0:25:25
