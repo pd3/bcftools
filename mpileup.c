@@ -37,7 +37,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/khash_str2int.h>
 #include <htslib/regidx.h>
 #include "bcftools.h"
-#include "call.h"
+#include "gvcf.h"
 
 static inline int printw(int c, FILE *fp)
 {
@@ -81,7 +81,7 @@ typedef struct {
     faidx_t *fai;
     void *rghash;
     regidx_t *bed;
-    gvcf_t gvcf;
+    gvcf_t *gvcf;
     int argc;
     char **argv;
 } mplp_conf_t;
@@ -175,7 +175,7 @@ static void group_smpl(mplp_pileup_t *m, bam_sample_t *sm, kstring_t *buf,
 
 static void flush_bcf_records(mplp_conf_t *conf, htsFile *fp, bcf_hdr_t *hdr, bcf1_t *rec)
 {
-    if ( conf->gvcf.min_dp < 0 )
+    if ( !conf->gvcf )
     {
         if ( rec ) bcf_write1(fp, hdr, rec);
         return;
@@ -183,7 +183,7 @@ static void flush_bcf_records(mplp_conf_t *conf, htsFile *fp, bcf_hdr_t *hdr, bc
 
     if ( !rec )
     {
-        gvcf_write(fp, &conf->gvcf, hdr, NULL, 0);
+        gvcf_write(conf->gvcf, fp, hdr, NULL, 0);
         return;
     }
 
@@ -194,7 +194,7 @@ static void flush_bcf_records(mplp_conf_t *conf, htsFile *fp, bcf_hdr_t *hdr, bc
         // second allele is mpileup's X, not a variant
         if ( rec->d.allele[1][0]=='<' && rec->d.allele[1][1]=='*' && rec->d.allele[1][2]=='>' ) is_ref = 1;
     }
-    rec = gvcf_write(fp, &conf->gvcf, hdr, rec, is_ref);
+    rec = gvcf_write(conf->gvcf, fp, hdr, rec, is_ref);
     if ( rec ) bcf_write1(fp,hdr,rec);
 }
 
@@ -353,12 +353,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=DP4,Number=4,Type=Integer,Description=\"Number of high-quality ref-fwd, ref-reverse, alt-fwd and alt-reverse bases\">");
     if ( conf->fmt_flag&B2B_FMT_SP )
         bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=SP,Number=1,Type=Integer,Description=\"Phred-scaled strand bias P-value\">");
-    if ( conf->gvcf.min_dp >= 0 )
-    {
-        bcf_hdr_append(bcf_hdr,"##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the variant described in this record\">");
-        bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">");
-    }
-
+    if ( conf->gvcf )
+        gvcf_update_header(conf->gvcf, bcf_hdr);
 
     for (i=0; i<sm->n; i++)
         bcf_hdr_add_sample(bcf_hdr, sm->smpl[i]);
@@ -372,18 +368,6 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
     bca->min_frac = conf->min_frac;
     bca->min_support = conf->min_support;
     bca->per_sample_flt = conf->flag & MPLP_PER_SAMPLE;
-
-    if ( conf->gvcf.min_dp >= 0 )
-    {
-        conf->gvcf.rid  = -1;
-        conf->gvcf.line = bcf_init1();
-        conf->gvcf.gt   = (int32_t*) malloc(2*sizeof(int32_t)*bcf_hdr_nsamples(bcf_hdr));
-        for (i=0; i<bcf_hdr_nsamples(bcf_hdr); i++)
-        {
-            conf->gvcf.gt[2*i+0] = bcf_gt_unphased(0);
-            conf->gvcf.gt[2*i+1] = bcf_gt_unphased(0);
-        }
-    }
 
     bc.bcf_hdr = bcf_hdr;
     bc.n = sm->n;
@@ -474,12 +458,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         free(bc.fmt_arr);
         free(bcr);
     }
-    if ( conf->gvcf.min_dp >= 0 )
-    {
-        if ( conf->gvcf.line ) bcf_destroy(conf->gvcf.line);
-        free(conf->gvcf.gt);
-        free(conf->gvcf.dp);
-    }
+    if ( conf->gvcf ) gvcf_destroy(conf->gvcf);
     bam_smpl_destroy(sm); free(buf.s);
     for (i = 0; i < gplp.n; ++i) free(gplp.plp[i]);
     free(gplp.plp); free(gplp.n_plp); free(gplp.m_plp);
@@ -614,7 +593,7 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
             "  -x, --ignore-overlaps   disable read-pair overlap detection\n"
             "\n"
             "Output options:\n"
-            "      --gvcf INT[,...]    group sites with listed minimum per-sample DP ranges in gVCF blocks (e.g. 5,10)\n"
+            "      --gvcf INT[,...]    group non-variant sites into gVCF blocks according to minimum per-sample DP\n"
             "  -o, --output FILE       write output to FILE [standard output]\n"
             "  -O, --output-type TYPE  'b' compressed BCF; 'u' uncompressed BCF; 'z' compressed VCF; 'v' uncompressed VCF [v]\n"
             "  -t, --output-tags LIST  optional tags to output: DP,DPR,DV,DP4,INFO/DPR,SP []\n"
@@ -660,7 +639,6 @@ int bam_mpileup(int argc, char *argv[])
     mplp.rflag_filter = BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP;
     mplp.output_fname = NULL;
     mplp.output_type = FT_VCF;
-    mplp.gvcf.min_dp = -1;
     static const struct option lopts[] =
     {
         {"rf", required_argument, NULL, 1},   // require flag
@@ -713,7 +691,6 @@ int bam_mpileup(int argc, char *argv[])
         {"platforms", required_argument, NULL, 'P'},
         {NULL, 0, NULL, 0}
     };
-    char *tmp;
     while ((c = getopt_long(argc, argv, "Agf:r:l:q:Q:uRC:BDSd:L:b:P:po:e:h:Im:F:EG:6O:sVvxt:",lopts,NULL)) >= 0) {
         switch (c) {
         case 'x': mplp.flag &= ~MPLP_SMART_OVERLAPS; break;
@@ -728,8 +705,9 @@ int bam_mpileup(int argc, char *argv[])
         case  3 : mplp.output_fname = optarg; break;
         case  4 : mplp.openQ = atoi(optarg); break;
         case  5 :
-                  if ( gvcf_init(&mplp.gvcf, optarg)<0 ) error("Could not parse: --gvcf %s\n", optarg);
-                  break;
+                mplp.gvcf = gvcf_init(optarg);
+                if ( !mplp.gvcf ) error("Could not parse: --gvcf %s\n", optarg);
+                break;
         case 'f':
             mplp.fai = fai_load(optarg);
             if (mplp.fai == 0) return 1;
@@ -802,7 +780,7 @@ int bam_mpileup(int argc, char *argv[])
             return 1;
         }
     }
-    if ( mplp.gvcf.min_dp>=0 && !(mplp.fmt_flag&B2B_FMT_DP) ) 
+    if ( mplp.gvcf && !(mplp.fmt_flag&B2B_FMT_DP) ) 
     {
         fprintf(stderr,"[warning] The -t DP option is required with --gvcf, switching on.\n");
         mplp.fmt_flag |= B2B_FMT_DP;

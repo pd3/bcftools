@@ -165,7 +165,7 @@ convert.o: convert.c $(htslib_vcf_h) $(htslib_synced_bcf_reader_h) $(htslib_vcfu
 tsv2vcf.o: tsv2vcf.c $(tsv2vcf_h)
 em.o: em.c $(htslib_vcf_h) kmin.h $(call_h)
 filter.o: filter.c $(HTSDIR)/htslib/khash_str2int.h $(filter_h) $(bcftools_h) $(htslib_hts_defs_h) $(htslib_vcfutils_h)
-gvcf.o: gvcf.c $(call_h)
+gvcf.o: gvcf.c gvcf.h $(call_h)
 kmin.o: kmin.c kmin.h
 mcall.o: mcall.c $(HTSDIR)/htslib/kfunc.h $(call_h)
 prob1.o: prob1.c $(prob1_h)

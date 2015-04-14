@@ -51,7 +51,7 @@ void error(const char *format, ...);
 #define CF_NO_GENO      1
 #define CF_INS_MISSED   (1<<1)
 #define CF_CCALL        (1<<2)
-#define CF_GVCF         (1<<3)
+//
 //                      (1<<4)
 //                      (1<<5)
 #define CF_ACGT_ONLY    (1<<6)
@@ -83,7 +83,6 @@ typedef struct
 
     bcf1_t *missed_line;
     call_t aux;     // parameters and temporary data
-    gvcf_t gvcf;
 
     int argc;
     char **argv;
@@ -290,8 +289,6 @@ static void print_missed_line(bcf_sr_regions_t *regs, void *data)
     call_t *call = &args->aux;
     bcf1_t *missed = args->missed_line;
 
-    if ( args->flag & CF_GVCF ) error("todo: Combine --gvcf and --insert-missed\n");
-
     char *ss = regs->line.s;
     int i = 0;
     while ( i<args->aux.srs->targets_als-1 && *ss )
@@ -373,19 +370,6 @@ static void init_data(args_t *args)
     if ( args->flag & CF_CCALL )
         ccall_init(&args->aux);
 
-    if ( args->flag&CF_GVCF )
-    {
-        bcf_hdr_append(args->aux.hdr,"##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the variant described in this record\">");
-        args->gvcf.rid  = -1;
-        args->gvcf.line = bcf_init1();
-        args->gvcf.gt   = (int32_t*) malloc(2*sizeof(int32_t)*bcf_hdr_nsamples(args->aux.hdr));
-        for (i=0; i<bcf_hdr_nsamples(args->aux.hdr); i++)
-        {
-            args->gvcf.gt[2*i+0] = bcf_gt_unphased(0);
-            args->gvcf.gt[2*i+1] = bcf_gt_unphased(0);
-        }
-    }
-
     bcf_hdr_remove(args->aux.hdr, BCF_HL_INFO, "QS");
     bcf_hdr_remove(args->aux.hdr, BCF_HL_INFO, "I16");
 
@@ -408,12 +392,9 @@ static void destroy_data(args_t *args)
         free(args->aux.fams);
     }
     if ( args->missed_line ) bcf_destroy(args->missed_line);
-    if ( args->gvcf.line ) bcf_destroy(args->gvcf.line);
     ploidy_destroy(args->ploidy);
     free(args->sex2ploidy);
     free(args->sex2ploidy_prev);
-    free(args->gvcf.gt);
-    free(args->gvcf.dp);
     free(args->samples);
     free(args->samples_map);
     free(args->sample2sex);
@@ -511,7 +492,6 @@ static void usage(args_t *args)
     fprintf(stderr, "Input/output options:\n");
     fprintf(stderr, "   -A, --keep-alts                 keep all possible alternate alleles at variant sites\n");
     fprintf(stderr, "   -f, --format-fields <list>      output format fields: GQ,GP (lowercase allowed) []\n");
-    fprintf(stderr, "   -g, --gvcf <minDP>              output gVCF blocks of homozygous REF calls\n");
     fprintf(stderr, "   -i, --insert-missed             output also sites missed by mpileup but present in -T\n");
     fprintf(stderr, "   -M, --keep-masked-ref           keep sites with masked reference allele (REF=N)\n");
     fprintf(stderr, "   -V, --skip-variants <type>      skip indels/snps\n");
@@ -557,7 +537,6 @@ int main_vcfcall(int argc, char *argv[])
     static struct option loptions[] =
     {
         {"help",0,0,'h'},
-        {"gvcf",1,0,'g'},
         {"format-fields",1,0,'f'},
         {"output",1,0,'o'},
         {"output-type",1,0,'O'},
@@ -584,16 +563,11 @@ int main_vcfcall(int argc, char *argv[])
     };
 
     char *tmp = NULL;
-    while ((c = getopt_long(argc, argv, "h?o:O:r:R:s:S:t:T:ANMV:vcmp:C:n:P:f:ig:", loptions, NULL)) >= 0)
+    while ((c = getopt_long(argc, argv, "h?o:O:r:R:s:S:t:T:ANMV:vcmp:C:n:P:f:i", loptions, NULL)) >= 0)
     {
         switch (c)
         {
             case  1 : ploidy_fname = optarg; break;
-            case 'g':
-                args.flag |= CF_GVCF;
-                args.gvcf.min_dp = strtol(optarg,&tmp,10);
-                if ( *tmp ) error("Could not parse, expected integer argument: -g %s\n", optarg);
-                break;
             case 'f': args.aux.output_tags |= parse_format_flag(optarg); break;
             case 'M': args.flag &= ~CF_ACGT_ONLY; break;     // keep sites where REF is N
             case 'N': args.flag |= CF_ACGT_ONLY; break;      // omit sites where first base in REF is N (the new default)
@@ -701,15 +675,8 @@ int main_vcfcall(int argc, char *argv[])
             if ( !(args.aux.flag & CALL_VARONLY) || !is_ref ) bcf_write1(args.out_fh, args.aux.hdr, bcf_rec);
             continue;
         }
-        else if ( is_ref )
-        {
-            if ( args.flag & CF_GVCF )
-            {
-                bcf_rec = gvcf_write(args.out_fh, &args.gvcf, args.aux.hdr, bcf_rec, 1);
-                if ( !bcf_rec || args.aux.flag&CALL_VARONLY ) continue;
-            }
-            else if ( args.aux.flag&CALL_VARONLY )  continue;
-        }
+        else if ( is_ref && args.aux.flag&CALL_VARONLY )
+            continue;
 
         bcf_unpack(bcf_rec, BCF_UN_ALL);
         if ( args.nsex ) set_ploidy(&args, bcf_rec);
@@ -729,18 +696,10 @@ int main_vcfcall(int argc, char *argv[])
             ret = ccall(&args.aux, bcf_rec);
         if ( ret==-1 ) error("Something is wrong\n");
 
-        // gVCF output. If is_ref is set, the record has been already processed
-        if ( args.flag & CF_GVCF && !is_ref )
-        {
-            bcf_rec = gvcf_write(args.out_fh, &args.gvcf, args.aux.hdr, bcf_rec, ret?0:1);
-            if ( !bcf_rec ) continue;
-        }
-
         // Normal output
         if ( (args.aux.flag & CALL_VARONLY) && ret==0 ) continue;     // not a variant
         bcf_write1(args.out_fh, args.aux.hdr, bcf_rec);
     }
-    if ( args.flag & CF_GVCF ) gvcf_write(args.out_fh, &args.gvcf, args.aux.hdr, NULL, 0);
     if ( args.flag & CF_INS_MISSED ) bcf_sr_regions_flush(args.aux.srs->targets);
     destroy_data(&args);
     return 0;

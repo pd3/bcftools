@@ -56,13 +56,6 @@
 
 typedef struct _ploidy_t ploidy_t;
 
-typedef struct
-{
-    int sex, ploidy;
-}
-sex_ploidy_t;
-
-
 /*
  *  ploidy_init()
  *  @param fname:   input file name or NULL if default ploidy from example above should be used

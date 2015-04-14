@@ -22,10 +22,34 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
-#include "call.h"
+#include "gvcf.h"
+#include "bcftools.h"
 
-int gvcf_init(gvcf_t *gvcf, const char *dp_ranges)
+struct _gvcf_t
 {
+    int *dp_range, ndp_range;   // per-sample DP ranges
+    int prev_range;             // 0 if not in a block
+    int32_t *dp, mdp, *pl, mpl, npl;
+    int32_t *tmp, mtmp;
+    int32_t rid, start, end, min_dp;
+    char ref[6];                // reference base at start position
+    bcf1_t *line;
+    int *sex2ploidy, sex2ploidy_prev;
+    uint8_t *sample2ploidy;
+};
+
+void gvcf_update_header(gvcf_t *gvcf, bcf_hdr_t *hdr)
+{
+    bcf_hdr_append(hdr,"##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the variant described in this record\">");
+    bcf_hdr_append(hdr,"##INFO=<ID=MinDP,Number=1,Type=Integer,Description=\"Minimum per-sample depth in this gVCF block\">");
+}
+
+gvcf_t *gvcf_init(const char *dp_ranges)
+{
+    gvcf_t *gvcf = (gvcf_t*) calloc(1,sizeof(gvcf_t));
+    gvcf->line = bcf_init();
+    memcpy(gvcf->ref,"X,<*>",6);
+
     int n = 1;
     const char *ss = dp_ranges;
     while ( *ss )
@@ -33,61 +57,78 @@ int gvcf_init(gvcf_t *gvcf, const char *dp_ranges)
         if ( *ss==',' ) n++;
         ss++;
     }
-    gvcf->ndp_range  = n;
-    gvcf->dp_range   = (int*) malloc(sizeof(int)*gvcf->ndp_range);
+    gvcf->ndp_range = n;
+    gvcf->dp_range  = (int*) malloc(sizeof(int)*gvcf->ndp_range);
 
     n  = 0;
     ss = dp_ranges;
     while ( *ss )
     {
-        const char *se = ss;
+        char *se = (char*) ss;
         gvcf->dp_range[n++] = strtol(ss,&se,10);
-        if ( se==ss ) return -1;
-        if ( *se==',' ) ss = se+1;
+        if ( se==ss ) return NULL;
+        if ( *se==',' && se[1] ) { ss = se+1; continue; }
         else if ( !*se ) break;
-        return -1;
+        return NULL;
     }
-    return 0;
+    return gvcf;
 }
 
-bcf1_t *gvcf_write(htsFile *fh, gvcf_t *gvcf, bcf_hdr_t *hdr, bcf1_t *rec, int is_ref)
+void gvcf_destroy(gvcf_t *gvcf)
+{
+    free(gvcf->dp_range);
+    free(gvcf->dp);
+    free(gvcf->pl);
+    free(gvcf->tmp);
+    if ( gvcf->line ) bcf_destroy(gvcf->line);
+    free(gvcf);
+}
+
+bcf1_t *gvcf_write(gvcf_t *gvcf, htsFile *fh, bcf_hdr_t *hdr, bcf1_t *rec, int is_ref)
 {
     int i, ret, nsmpl = bcf_hdr_nsamples(hdr);
     int can_collapse = is_ref ? 1 : 0;
-    int can_flush = gvcf->rid==-1 ? 0 : 1;
-    int dp_range = 0;
+    int dp_range = 0, min_dp = 0;
 
-    if ( !rec && !can_flush ) return NULL;
+    // No record and nothing to flush?
+    if ( !rec && !gvcf->prev_range ) return NULL;
 
-    // Can the record be included in a gVCF block?
+    // Flush gVCF block if there are no more records, chr changed, a gap
+    // encountered, or other conditions not met (block broken by a non-ref or DP too low).
+    int needs_flush = can_collapse ? 0 : 1;
+
+
+    // Can the record be included in a gVCF block? That is, is this a ref-only site?
     if ( rec && can_collapse )
     {
         bcf_unpack(rec, BCF_UN_ALL);
 
         // per-sample depth
-        ret = bcf_get_format_int32(hdr, rec, "DP", &gvcf->dp, &gvcf->mdp);
+        ret = bcf_get_format_int32(hdr, rec, "DP", &gvcf->tmp, &gvcf->mtmp);
         if ( ret==nsmpl )
         {
-            int min_dp = gvcf->dp[i];
+            if ( ret!=nsmpl )
+                error("Could not parse DP at %s:%d: wrong number of values\n", bcf_hdr_id2name(hdr,rec->rid), rec->pos+1);
+
+            min_dp = gvcf->tmp[0];
             for (i=1; i<nsmpl; i++)
-                if ( min_dp > gvcf->dp[i] ) min_dp = gvcf->dp[i];
+                if ( min_dp > gvcf->tmp[i] ) min_dp = gvcf->tmp[i];
 
             for (i=0; i<gvcf->ndp_range; i++)
                 if ( min_dp < gvcf->dp_range[i] ) break;
 
             dp_range = i;
-
-            if ( dp_range==0 )
-                can_collapse = 0;
-            else if ( gvcf->prev_range != dp_range )
-                can_collapse = 0;
-
+            if ( !dp_range ) return NULL;   // ignore the site, DP too small
         }
+        else
+            needs_flush = 1;       // DP field not present
     }
 
-    // Flush gVCF block if there is no more records, chr changed, a gap
-    // encountered, or other conditions not met (block broken by a non-ref or a too low DP)
-    if ( can_flush && (!rec || gvcf->rid!=rec->rid || rec->pos > gvcf->end+1 || !can_collapse) )
+    if ( gvcf->prev_range && gvcf->prev_range!=dp_range ) needs_flush = 1;
+    if ( !rec || gvcf->rid!=rec->rid || rec->pos > gvcf->end+1 ) needs_flush = 1;
+
+    // If prev_range is set, something can be flushed
+    if ( gvcf->prev_range && needs_flush )
     {
         // mpileup can output two records with the same position, SNP and
         // indel. Make sure the end position does not include the non-variant
@@ -95,29 +136,57 @@ bcf1_t *gvcf_write(htsFile *fh, gvcf_t *gvcf, bcf_hdr_t *hdr, bcf1_t *rec, int i
         if ( rec && rec->rid==gvcf->rid && rec->pos==gvcf->end ) gvcf->end--;
 
         gvcf->end++;    // from 0-based to 1-based coordinate
-..
+
         bcf_clear1(gvcf->line);
         gvcf->line->rid  = gvcf->rid;
         gvcf->line->pos  = gvcf->start;
         gvcf->line->rlen = gvcf->end - gvcf->start;
         bcf_update_alleles_str(hdr, gvcf->line, gvcf->ref);
         bcf_update_info_int32(hdr, gvcf->line, "END", &gvcf->end, 1);
-        bcf_update_genotypes(hdr, gvcf->line, gvcf->gt, nsmpl*2);
+        bcf_update_info_int32(hdr, gvcf->line, "MinDP", &gvcf->min_dp, 1);
+        bcf_update_format_int32(hdr, gvcf->line, "PL", gvcf->pl, nsmpl*3);
+        bcf_update_format_int32(hdr, gvcf->line, "DP", gvcf->dp, nsmpl);
         bcf_write1(fh, hdr, gvcf->line);
-        gvcf->rid = -1;
+        gvcf->prev_range = 0;
+        gvcf->rid  = -1;
+        gvcf->npl  = 0;
 
-        if ( !rec ) return NULL;     // just flushing the buffer, last record
+        if ( !rec ) return NULL;     // just flushing the buffer, this was last record
     }
 
     if ( can_collapse )
     {
-        if ( gvcf->rid==-1 )
+        if ( !gvcf->prev_range )
         {
+            hts_expand(int32_t,nsmpl,gvcf->mdp,gvcf->dp);
+            memcpy(gvcf->dp,gvcf->tmp,nsmpl*sizeof(int32_t));   // tmp still contains DP from rec
+            ret = bcf_get_format_int32(hdr, rec, "PL", &gvcf->pl, &gvcf->mpl);
+            if ( !ret ) error("PL field not present\n");
+
             gvcf->rid    = rec->rid;
             gvcf->start  = rec->pos;
             gvcf->ref[0] = rec->d.allele[0][0];
-            gvcf->ref[1] = 0;
+            gvcf->min_dp = min_dp;
         }
+        else
+        {
+            if ( gvcf->min_dp > min_dp ) gvcf->min_dp = min_dp;
+            for (i=0; i<nsmpl; i++)
+                if ( gvcf->dp[i] > gvcf->tmp[i] ) gvcf->dp[i] = gvcf->tmp[i];
+            ret = bcf_get_format_int32(hdr, rec, "PL", &gvcf->tmp, &gvcf->mtmp);
+            if ( !ret || ret!=nsmpl*3 ) error("PL field not present or unexpected number of fields\n");
+            for (i=0; i<nsmpl; i++)
+            {
+                if ( gvcf->dp[3*i+1] > gvcf->tmp[3*i+1] )
+                {
+                    gvcf->dp[3*i+1] = gvcf->tmp[3*i+1];
+                    gvcf->dp[3*i+2] = gvcf->tmp[3*i+2];
+                }
+                else if ( gvcf->dp[3*i+1]==gvcf->tmp[3*i+1] && gvcf->dp[3*i+2] > gvcf->tmp[3*i+2] )
+                    gvcf->dp[3*i+2] = gvcf->tmp[3*i+2];
+            }
+        }
+        gvcf->prev_range = dp_range;
         gvcf->end = rec->pos;
         return NULL;
     }

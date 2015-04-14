@@ -39,6 +39,13 @@ struct _ploidy_t
     kstring_t tmp_str;
 };
 
+typedef struct
+{
+    int sex, ploidy;
+}
+sex_ploidy_t;
+
+
 regidx_t *ploidy_regions(ploidy_t *ploidy)
 {
     return ploidy->idx;
