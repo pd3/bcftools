@@ -112,13 +112,33 @@ static void fix_ref(args_t *args, bcf1_t *line)
         int len = strlen(line->d.allele[i]);
         if ( !strncasecmp(line->d.allele[i],ref,len) ) break;
     }
+
+    kstring_t str = {0,0,0};
+    if ( i==line->n_allele )
+    {
+        // none of the alternate alleles matches the reference
+        if ( line->n_allele>1 )
+            args->nref.set++;
+        else
+            args->nref.swap++;
+
+        kputs(line->d.allele[0],&str);
+        kputc(',',&str);
+        for (i=1; i<line->n_allele; i++)
+        {
+            kputs(line->d.allele[i],&str);
+            kputc(',',&str);
+        }
+        kputc(ref[0],&str);
+        bcf_update_alleles_str(args->hdr,line,str.s);
+        str.l = 0;
+    }
+    else
+        args->nref.swap++;
     free(ref);
-    if ( i==line->n_allele ) 
-        error("[%s:%d %s] No matching allele at %s:%d, will not fix\n", __FILE__,__LINE__,__FUNCTION__, bcf_seqname(args->hdr,line),line->pos+1);
 
     // swap the alleles
     int j;
-    kstring_t str = {0,0,0};
     kputs(line->d.allele[i],&str);
     for (j=1; j<i; j++)
     {
@@ -132,7 +152,6 @@ static void fix_ref(args_t *args, bcf1_t *line)
         kputc(',',&str);
         kputs(line->d.allele[j],&str);
     }
-    args->nref.swap++;
     bcf_update_alleles_str(args->hdr,line,str.s);
 
     // swap genotypes
