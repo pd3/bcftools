@@ -36,11 +36,13 @@ int *arr = NULL, marr = 0;
 uint64_t nchanged = 0;
 int tgt_mask = 0, new_mask = 0, new_gt = 0;
 
-#define GT_MISSING 1
-#define GT_PARTIAL (1<<1)
-#define GT_REF     (1<<2)
-#define GT_MAJOR   (1<<3)
-#define GT_PHASED  (1<<4)
+#define GT_MISSING   1
+#define GT_PARTIAL  (1<<1)
+#define GT_REF      (1<<2)
+#define GT_MAJOR    (1<<3)
+#define GT_PHASED   (1<<4)
+#define GT_UNPHASED (1<<5)
+#define GT_ALL      (1<<6)
 
 const char *about(void)
 {
@@ -54,11 +56,13 @@ const char *usage(void)
         "           ./.  .. completely missing (\".\" or \"./.\", depending on ploidy)\n"
         "           ./x  .. partially missing (e.g., \"./0\" or \".|1\" but not \"./.\")\n"
         "           .    .. partially or completely missing\n"
+        "           a    .. all genotypes\n"
         "       and the new genotype can be one of:\n"
         "           .    .. missing (\".\" or \"./.\", keeps ploidy)\n"
         "           0    .. reference allele\n"
         "           M    .. major allele\n"
         "           p    .. phased genotype\n"
+        "           u    .. unphase genotype and sort by allele (1|0 becomes 0/1)\n"
         "Usage: bcftools +setGT [General Options] -- [Plugin Options]\n"
         "Options:\n"
         "   run \"bcftools plugin\" for a list of common options\n"
@@ -95,11 +99,13 @@ int init(int argc, char **argv, bcf_hdr_t *in, bcf_hdr_t *out)
                 if ( strchr(optarg,'0') ) new_mask |= GT_REF;
                 if ( strchr(optarg,'M') ) new_mask |= GT_MAJOR;
                 if ( strchr(optarg,'p') ) new_mask |= GT_PHASED;
+                if ( strchr(optarg,'u') ) new_mask |= GT_UNPHASED;
                 break;
             case 't':
                 if ( !strcmp(optarg,".") ) tgt_mask |= GT_MISSING|GT_PARTIAL;
                 if ( !strcmp(optarg,"./x") ) tgt_mask |= GT_PARTIAL;
                 if ( !strcmp(optarg,"./.") ) tgt_mask |= GT_MISSING;
+                if ( !strcmp(optarg,"a") ) tgt_mask |= GT_ALL;
                 break;
             case 'h':
             case '?':
@@ -161,17 +167,43 @@ bcf1_t *process(bcf1_t *rec)
         }
 
         int do_set = 0;
-        if ( tgt_mask&GT_PARTIAL && nmiss ) do_set = 1;
+        if ( tgt_mask&GT_ALL ) do_set = 1;
+        else if ( tgt_mask&GT_PARTIAL && nmiss ) do_set = 1;
         else if ( tgt_mask&GT_MISSING && ploidy==nmiss ) do_set = 1;
 
-        if ( do_set )
+        if ( !do_set ) continue;
+
+        if ( new_mask&GT_UNPHASED )
         {
             for (j=0; j<ngts; j++)
             {
                 if ( ptr[j]==bcf_int32_vector_end ) break;
-                ptr[j] = new_gt;
+                if ( !bcf_gt_is_phased(ptr[j]) ) continue;
+                ptr[j] = bcf_gt_unphased(bcf_gt_allele(ptr[j]));    // remove phasing
                 changed++;
             }
+
+            // insertion sort
+            int k, l;
+            for (k=1; k<j; k++)
+            {
+                int32_t x = ptr[k];
+                l = k;
+                while ( l>0 && ptr[l-1]>x )
+                {
+                    ptr[l] = ptr[l-1];
+                    l--;
+                }
+                ptr[l] = x;
+            }
+            continue;
+        }
+
+        for (j=0; j<ngts; j++)
+        {
+            if ( ptr[j]==bcf_int32_vector_end ) break;
+            ptr[j] = new_gt;
+            changed++;
         }
     }
     nchanged += changed;
