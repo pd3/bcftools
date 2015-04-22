@@ -31,6 +31,7 @@
 #include <htslib/regidx.h>
 #include <htslib/synced_bcf_reader.h>
 #include <htslib/vcfutils.h>
+#include <inttypes.h>
 #include "bcftools.h"
 #include "ploidy.h"
 
@@ -39,7 +40,7 @@
 
 typedef struct
 {
-    uint32_t nhet, nhom, nmiss;
+    uint64_t nhet, nhom, nmiss;
 }
 count_t;
 
@@ -280,7 +281,8 @@ int process_region_guess(args_t *args, char *seq, regitr_t *itr)
 
 void sex2prob_guess(args_t *args)
 {
-    int ismpl, ireg, nhom,nhet,nmiss;
+    int ismpl, ireg; 
+    uint64_t nhom,nhet,nmiss;
     float bg_het = -1;
 
     if ( args->background )
@@ -294,7 +296,7 @@ void sex2prob_guess(args_t *args)
         if ( args->verbose )
         {
             printf("# [1]BGR\t[2]Region\t[3]Het fraction\t[4]nHet\t[5]nHom\t[6]nMissing\n");
-            printf("BGR\t%s\t%f\t%d\t%d\t%d\n", args->background,bg_het,nhet,nhom,nmiss);
+            printf("BGR\t%s\t%f\t%"PRId64"\t%"PRId64"\t%"PRId64"\n", args->background,bg_het,nhet,nhom,nmiss);
         }
     }
 
@@ -304,13 +306,13 @@ void sex2prob_guess(args_t *args)
         reg_stats_t *stats = &args->reg_stats[ireg];
         for (ismpl=0; ismpl<args->nsample; ismpl++)
         {
-            int nhom  = stats->counts[ismpl].nhom;
-            int nhet  = stats->counts[ismpl].nhet;
-            int nmiss = stats->counts[ismpl].nmiss;
+            uint64_t nhom  = stats->counts[ismpl].nhom;
+            uint64_t nhet  = stats->counts[ismpl].nhet;
+            uint64_t nmiss = stats->counts[ismpl].nmiss;
             float fhet = nhom+nhet ? (float)nhet/(nhom+nhet) : 0;
 
             if ( args->verbose )
-                printf("DBG\t%s:%d-%d\t%s\t%f\t%d\t%d\t%d\n", stats->chr,stats->start+1,stats->end+1,args->hdr->samples[ismpl],fhet,nhet,nhom,nmiss);
+                printf("DBG\t%s:%d-%d\t%s\t%f\t%"PRId64"\t%"PRId64"\t%"PRId64"\n", stats->chr,stats->start+1,stats->end+1,args->hdr->samples[ismpl],fhet,nhet,nhom,nmiss);
 
             int i, ntot = nhom + nhet + nmiss;
             if ( !ntot ) continue;
@@ -391,7 +393,8 @@ int run(int argc, char **argv)
 
     args->sr = bcf_sr_init();
     args->sr->require_index = 1;
-    if ( !argv[0] || !bcf_sr_add_reader(args->sr,argv[0]) ) error("%s", usage());
+    if ( !argv[0] ) error("%s", usage());
+    if ( !bcf_sr_add_reader(args->sr,argv[0]) ) error("Error: %s\n", bcf_sr_strerror(args->sr->errnum));
     args->hdr = args->sr->readers[0].header;
     args->nsample = bcf_hdr_nsamples(args->hdr);
  
@@ -437,7 +440,7 @@ int run(int argc, char **argv)
                 itr.i += process_region_precise(args, seqs[i], &itr);
         }
     }
-    sex2prob_guess(args);
+    if ( args->guess ) sex2prob_guess(args);
 
     for (i=0; i<args->nsample; i++)
     {
