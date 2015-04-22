@@ -2,12 +2,20 @@
 .\"     Title: bcftools
 .\"    Author: [see the "AUTHORS" section]
 .\" Generator: DocBook XSL Stylesheets v1.76.1 <http://docbook.sf.net/>
+<<<<<<< HEAD
 .\"      Date: 2015-05-15 09:36 BST
+=======
+.\"      Date: 04/22/2015
+>>>>>>> cd1ebd1... gvcf fill ref allele from fasta
 .\"    Manual: \ \&
 .\"    Source: \ \&
 .\"  Language: English
 .\"
+<<<<<<< HEAD
 .TH "BCFTOOLS" "1" "2015\-05\-15 09:36 BST" "\ \&" "\ \&"
+=======
+.TH "BCFTOOLS" "1" "04/22/2015" "\ \&" "\ \&"
+>>>>>>> cd1ebd1... gvcf fill ref allele from fasta
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -41,7 +49,10 @@ Most commands accept VCF, bgzipped VCF and BCF with filetype detected automatica
 BCFtools is designed to work on a stream\&. It regards an input file "\-" as the standard input (stdin) and outputs to the standard output (stdout)\&. Several commands can thus be combined with Unix pipes\&.
 .SS "VERSION"
 .sp
+<<<<<<< HEAD
 This manual page was last updated \fB2015\-05\-15 09:36 BST\fR and refers to bcftools git version \fB1\&.2\-79\-g7dfd140+\fR\&.
+=======
+>>>>>>> cd1ebd1... gvcf fill ref allele from fasta
 .SS "BCF1"
 .sp
 The BCF1 format output by versions of samtools <= 0\&.1\&.19 is \fBnot\fR compatible with this version of bcftools\&. To read BCF1 files one can use the view command from old versions of bcftools packaged with samtools versions <= 0\&.1\&.19 to convert to VCF, which can then be read by this version of bcftools\&.
@@ -1100,6 +1111,11 @@ tag to take values for \&.gen file: GT,PL,GL,GP
 .RS 4
 convert gVCF to VCF, expanding REF blocks into sites\&. Only sites with FILTER set to "PASS" or "\&." will be expanded\&.
 .RE
+.PP
+\fB\-f, \-\-fasta\-ref\fR \fIfile\fR
+.RS 4
+reference sequence in fasta format\&. Must be indexed with samtools faidx
+.RE
 .RE
 .sp
 .it 1 an-trap
@@ -1210,7 +1226,7 @@ comma\-separated list of fields in the input file\&. In the current version, the
 .PP
 \fB\-f, \-\-fasta\-ref\fR \fIfile\fR
 .RS 4
-reference sequence in fasta format
+reference sequence in fasta format\&. Must be indexed with samtools faidx
 .RE
 .PP
 \fB\-s, \-\-samples\fR \fILIST\fR
