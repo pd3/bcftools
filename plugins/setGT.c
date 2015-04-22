@@ -126,6 +126,8 @@ int init(int argc, char **argv, bcf_hdr_t *in, bcf_hdr_t *out)
 
 bcf1_t *process(bcf1_t *rec)
 {
+    if ( !rec->n_sample ) return rec;
+
     int ngts = bcf_get_genotypes(in_hdr, rec, &gts, &mgts);
     ngts /= rec->n_sample;
     int i, j, changed = 0;
