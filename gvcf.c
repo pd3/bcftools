@@ -34,8 +34,6 @@ struct _gvcf_t
     int32_t rid, start, end, min_dp;
     char ref[6];                // reference base at start position
     bcf1_t *line;
-    int *sex2ploidy, sex2ploidy_prev;
-    uint8_t *sample2ploidy;
 };
 
 void gvcf_update_header(gvcf_t *gvcf, bcf_hdr_t *hdr)
@@ -88,7 +86,7 @@ bcf1_t *gvcf_write(gvcf_t *gvcf, htsFile *fh, bcf_hdr_t *hdr, bcf1_t *rec, int i
 {
     int i, ret, nsmpl = bcf_hdr_nsamples(hdr);
     int can_collapse = is_ref ? 1 : 0;
-    int dp_range = 0, min_dp = 0;
+    int32_t dp_range = 0, min_dp = 0;
 
     // No record and nothing to flush?
     if ( !rec && !gvcf->prev_range ) return NULL;
@@ -118,7 +116,13 @@ bcf1_t *gvcf_write(gvcf_t *gvcf, htsFile *fh, bcf_hdr_t *hdr, bcf1_t *rec, int i
                 if ( min_dp < gvcf->dp_range[i] ) break;
 
             dp_range = i;
-            if ( !dp_range ) return NULL;   // ignore the site, DP too small
+            if ( !dp_range )
+            {
+                // leave the record unchanged, DP is too small. Alternatively, return NULL here
+                // to skip these sites
+                needs_flush  = 1;
+                can_collapse = 0;
+            }
         }
         else
             needs_flush = 1;       // DP field not present
@@ -142,10 +146,14 @@ bcf1_t *gvcf_write(gvcf_t *gvcf, htsFile *fh, bcf_hdr_t *hdr, bcf1_t *rec, int i
         gvcf->line->pos  = gvcf->start;
         gvcf->line->rlen = gvcf->end - gvcf->start;
         bcf_update_alleles_str(hdr, gvcf->line, gvcf->ref);
-        bcf_update_info_int32(hdr, gvcf->line, "END", &gvcf->end, 1);
+        if ( gvcf->start+1 < gvcf->end )    // create gVCF record only if it spans at least two sites
+            bcf_update_info_int32(hdr, gvcf->line, "END", &gvcf->end, 1);
         bcf_update_info_int32(hdr, gvcf->line, "MinDP", &gvcf->min_dp, 1);
         bcf_update_format_int32(hdr, gvcf->line, "PL", gvcf->pl, nsmpl*3);
         bcf_update_format_int32(hdr, gvcf->line, "DP", gvcf->dp, nsmpl);
+        // dirty: filling directly, we know what QS looks like
+        float tmp[2]; tmp[0] = nsmpl; tmp[1] = 0;
+        bcf_update_info_float(hdr, gvcf->line, "QS", tmp, 2);
         bcf_write1(fh, hdr, gvcf->line);
         gvcf->prev_range = 0;
         gvcf->rid  = -1;
@@ -177,19 +185,22 @@ bcf1_t *gvcf_write(gvcf_t *gvcf, htsFile *fh, bcf_hdr_t *hdr, bcf1_t *rec, int i
             if ( !ret || ret!=nsmpl*3 ) error("PL field not present or unexpected number of fields\n");
             for (i=0; i<nsmpl; i++)
             {
-                if ( gvcf->dp[3*i+1] > gvcf->tmp[3*i+1] )
+                if ( gvcf->pl[3*i+1] > gvcf->tmp[3*i+1] )
                 {
-                    gvcf->dp[3*i+1] = gvcf->tmp[3*i+1];
-                    gvcf->dp[3*i+2] = gvcf->tmp[3*i+2];
+                    gvcf->pl[3*i+1] = gvcf->tmp[3*i+1];
+                    gvcf->pl[3*i+2] = gvcf->tmp[3*i+2];
                 }
-                else if ( gvcf->dp[3*i+1]==gvcf->tmp[3*i+1] && gvcf->dp[3*i+2] > gvcf->tmp[3*i+2] )
-                    gvcf->dp[3*i+2] = gvcf->tmp[3*i+2];
+                else if ( gvcf->pl[3*i+1]==gvcf->tmp[3*i+1] && gvcf->pl[3*i+2] > gvcf->tmp[3*i+2] )
+                    gvcf->pl[3*i+2] = gvcf->tmp[3*i+2];
             }
         }
         gvcf->prev_range = dp_range;
         gvcf->end = rec->pos;
         return NULL;
     }
+
+    if ( is_ref && min_dp )
+        bcf_update_info_int32(hdr, rec, "MinDP", &min_dp, 1);
 
     return rec;
 }

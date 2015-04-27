@@ -1395,7 +1395,7 @@ int mcall(call_t *call, bcf1_t *rec)
         nout++;
     }
     int is_variant = out_als==1 ? 0 : 1;
-    if ( call->flag & CALL_VARONLY && !is_variant ) return 0;
+    if ( call->flag & CALL_VARONLY && !is_variant && !call->keep_gvcf ) return 0;
 
     // With -A, keep all ALTs except X
     if ( call->flag & CALL_KEEPALT )
@@ -1430,7 +1430,7 @@ int mcall(call_t *call, bcf1_t *rec)
 
         // Skip the site if all samples are 0/0. This can happen occasionally.
         nAC = call->ac[1] + call->ac[2] + call->ac[3];
-        if ( !nAC && call->flag & CALL_VARONLY ) return 0;
+        if ( !nAC && call->flag & CALL_VARONLY && !call->keep_gvcf ) return 0;
         mcall_trim_PLs(call, rec, nals, nout, out_als);
     }
     if ( nals!=nout ) mcall_trim_numberR(call, rec, nals, nout, out_als);
@@ -1468,13 +1468,14 @@ int mcall(call_t *call, bcf1_t *rec)
     bcf_update_genotypes(call->hdr, rec, call->gts, nsmpl*2);
 
     // DP4 tag
-    if ( bcf_get_info_float(call->hdr, rec, "I16", &call->anno16, &call->n16)!=16 )
-        error("I16 hasn't 16 fields at %s:%d\n", call->hdr->id[BCF_DT_CTG][rec->rid].key,rec->pos+1);
-    int32_t dp[4]; dp[0] = call->anno16[0]; dp[1] = call->anno16[1]; dp[2] = call->anno16[2]; dp[3] = call->anno16[3];
-    bcf_update_info_int32(call->hdr, rec, "DP4", dp, 4);
+    if ( bcf_get_info_float(call->hdr, rec, "I16", &call->anno16, &call->n16)==16 )
+    {
+        int32_t dp[4]; dp[0] = call->anno16[0]; dp[1] = call->anno16[1]; dp[2] = call->anno16[2]; dp[3] = call->anno16[3];
+        bcf_update_info_int32(call->hdr, rec, "DP4", dp, 4);
 
-    int32_t mq = (call->anno16[8]+call->anno16[10])/(call->anno16[0]+call->anno16[1]+call->anno16[2]+call->anno16[3]);
-    bcf_update_info_int32(call->hdr, rec, "MQ", &mq, 1);
+        int32_t mq = (call->anno16[8]+call->anno16[10])/(call->anno16[0]+call->anno16[1]+call->anno16[2]+call->anno16[3]);
+        bcf_update_info_int32(call->hdr, rec, "MQ", &mq, 1);
+    }
 
     bcf_update_info_int32(call->hdr, rec, "I16", NULL, 0);     // remove I16 tag
     bcf_update_info_int32(call->hdr, rec, "QS", NULL, 0);      // remove QS tag

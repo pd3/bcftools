@@ -51,7 +51,7 @@ void error(const char *format, ...);
 #define CF_NO_GENO      1
 #define CF_INS_MISSED   (1<<1)
 #define CF_CCALL        (1<<2)
-//
+#define CF_KEEP_GVCF    (1<<3)
 //                      (1<<4)
 //                      (1<<5)
 #define CF_ACGT_ONLY    (1<<6)
@@ -492,6 +492,7 @@ static void usage(args_t *args)
     fprintf(stderr, "Input/output options:\n");
     fprintf(stderr, "   -A, --keep-alts                 keep all possible alternate alleles at variant sites\n");
     fprintf(stderr, "   -f, --format-fields <list>      output format fields: GQ,GP (lowercase allowed) []\n");
+    fprintf(stderr, "   -g, --gvcf                      output also gVCF blocks\n");
     fprintf(stderr, "   -i, --insert-missed             output also sites missed by mpileup but present in -T\n");
     fprintf(stderr, "   -M, --keep-masked-ref           keep sites with masked reference allele (REF=N)\n");
     fprintf(stderr, "   -V, --skip-variants <type>      skip indels/snps\n");
@@ -538,6 +539,7 @@ int main_vcfcall(int argc, char *argv[])
     {
         {"help",0,0,'h'},
         {"format-fields",1,0,'f'},
+        {"gvcf",0,0,'g'},
         {"output",1,0,'o'},
         {"output-type",1,0,'O'},
         {"regions",1,0,'r'},
@@ -563,7 +565,7 @@ int main_vcfcall(int argc, char *argv[])
     };
 
     char *tmp = NULL;
-    while ((c = getopt_long(argc, argv, "h?o:O:r:R:s:S:t:T:ANMV:vcmp:C:n:P:f:i", loptions, NULL)) >= 0)
+    while ((c = getopt_long(argc, argv, "h?o:O:r:R:s:S:t:T:ANMV:vcmp:C:n:P:f:ig", loptions, NULL)) >= 0)
     {
         switch (c)
         {
@@ -575,6 +577,7 @@ int main_vcfcall(int argc, char *argv[])
             case 'c': args.flag |= CF_CCALL; break;          // the original EM based calling method
             case 'i': args.flag |= CF_INS_MISSED; break;
             case 'v': args.aux.flag |= CALL_VARONLY; break;
+            case 'g': args.flag |= CF_KEEP_GVCF; break;
             case 'o': args.output_fname = optarg; break;
             case 'O':
                       switch (optarg[0]) {
@@ -668,14 +671,9 @@ int main_vcfcall(int argc, char *argv[])
             }
         }
         int is_ref = (bcf_rec->n_allele==1 || (bcf_rec->n_allele==2 && args.aux.unseen>0)) ? 1 : 0;
+        args.aux.keep_gvcf = ( args.flag&CF_KEEP_GVCF && bcf_get_info(args.aux.hdr, bcf_rec, "END") )  ? 1 : 0;
 
-        if ( !args.aux.unseen && !is_indel )
-        {
-            // No symbolic <*> allele, the site cannot be called. Print it as it is or skip if -v was given.
-            if ( !(args.aux.flag & CALL_VARONLY) || !is_ref ) bcf_write1(args.out_fh, args.aux.hdr, bcf_rec);
-            continue;
-        }
-        else if ( is_ref && args.aux.flag&CALL_VARONLY )
+        if ( is_ref && args.aux.flag&CALL_VARONLY && !args.aux.keep_gvcf )
             continue;
 
         bcf_unpack(bcf_rec, BCF_UN_ALL);
@@ -697,7 +695,7 @@ int main_vcfcall(int argc, char *argv[])
         if ( ret==-1 ) error("Something is wrong\n");
 
         // Normal output
-        if ( (args.aux.flag & CALL_VARONLY) && ret==0 ) continue;     // not a variant
+        if ( (args.aux.flag & CALL_VARONLY) && ret==0 && !args.aux.keep_gvcf ) continue;     // not a variant
         bcf_write1(args.out_fh, args.aux.hdr, bcf_rec);
     }
     if ( args.flag & CF_INS_MISSED ) bcf_sr_regions_flush(args.aux.srs->targets);

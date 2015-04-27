@@ -117,8 +117,8 @@ test_vcf_view($opts,in=>'view.minmaxac',out=>'view.minmaxac.1.out',args=>q[-H -C
 test_vcf_view($opts,in=>'view.minmaxac',out=>'view.minmaxac.2.out',args=>q[-H -c6:nonmajor],reg=>'');
 test_vcf_view($opts,in=>'view.minmaxac',out=>'view.minmaxac.1.out',args=>q[-H -q0.3:major],reg=>'');
 test_mpileup($opts,out=>'mpileup.3.out',args=>q[-t DP,DV -r17:100-600]);
-test_mpileup($opts,out=>'mpileup.4.out',args=>q[-t DP,DV -r17:100-600 --gvcf 3]);
-test_gvcf_calling($opts,out=>'calling.1.out',mpileup=>q[--gvcf 1,5],call=>q[-mvg]);
+test_mpileup($opts,out=>'mpileup.4.out',args=>q[-t DP,DV -r17:100-600 --gvcf 1,3]);
+test_gvcf_calling($opts,out=>'calling.1.out',mpileup=>q[--gvcf 1,5],call=>q[-mv]);
 test_vcf_call($opts,in=>'mpileup',out=>'mpileup.1.out',args=>'-mv');
 test_vcf_call_cAls($opts,in=>'mpileup',out=>'mpileup.cAls.out',tab=>'mpileup');
 test_vcf_filter($opts,in=>'filter.1',out=>'filter.1.out',args=>'-mx -g2 -G2');
@@ -789,16 +789,19 @@ sub test_gvcf_calling
     my ($opts,%args) = @_;
     for my $fmt ('bam','cram')
     {
-        my @files = ();
+        my @vcfs = ();
+        my @alns = ();
         for my $file ('1', '2', '3')
         {
             cmd("$$opts{bin}/bcftools mpileup $args{mpileup} -f $$opts{path}/mpileup/ref.fa $$opts{path}/mpileup/$file.$fmt -Ob -o $$opts{tmp}/$file.bcf");
             cmd("$$opts{bin}/bcftools index $$opts{tmp}/$file.bcf");
-            push @files, "$$opts{tmp}/$file.bcf"; 
+            push @vcfs, "$$opts{tmp}/$file.bcf"; 
+            push @alns, "$$opts{path}/mpileup/$file.$fmt"; 
         }
-        my $files = join(' ',@files);
-        my $grep_hdr = "grep -v ^##bcftools | grep -v ^##mpileup | grep -v ^##reference";
-        test_cmd($opts,%args,cmd=>"$$opts{bin}/bcftools merge $files -Ou | $$opts{bin}/bcftools call $args{call} | $grep_hdr");
+        my $vcfs = join(' ',@vcfs);
+        my $alns = join(' ',@alns);
+        test_cmd($opts,%args,cmd=>"$$opts{bin}/bcftools merge $vcfs -g -Ou | $$opts{bin}/bcftools call $args{call} | $$opts{bin}/bcftools query -f'%CHROM\\t%POS[\\t%GT]\\n'");
+        test_cmd($opts,%args,cmd=>"$$opts{bin}/bcftools mpileup $alns -Ou -f $$opts{path}/mpileup/ref.fa | $$opts{bin}/bcftools call $args{call} | $$opts{bin}/bcftools query -f'%CHROM\\t%POS[\\t%GT]\\n'");
     }
 }
 
