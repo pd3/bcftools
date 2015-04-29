@@ -563,7 +563,8 @@ static void usage(args_t *args)
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "   -a, --allow-overlaps           First coordinate of the next file can precede last record of the current file.\n");
     fprintf(stderr, "   -c, --compact-PS               Do not output PS tag at each site, only at the start of a new phase set block.\n");
-    fprintf(stderr, "   -D, --rm-dups <string>         Output duplicate records present in multiple files only once: <snps|indels|both|all|none>\n");
+    fprintf(stderr, "   -d, --rm-dups <string>         Output duplicate records present in multiple files only once: <snps|indels|both|all|none>\n");
+    fprintf(stderr, "   -D, --remove-duplicates        Alias for -d none\n");
     fprintf(stderr, "   -f, --file-list <file>         Read the list of files from a file.\n");
     fprintf(stderr, "   -l, --ligate                   Ligate phased VCFs by matching phase at overlapping haplotypes\n");
     fprintf(stderr, "   -o, --output <file>            Write output to a file [standard output]\n");
@@ -589,7 +590,8 @@ int main_vcfconcat(int argc, char *argv[])
         {"compact-PS",0,0,'c'},
         {"regions",1,0,'r'},
         {"regions-file",1,0,'R'},
-        {"rm-dups",1,0,'D'},
+        {"remove-duplicates",0,0,'D'},
+        {"rm-dups",1,0,'d'},
         {"allow-overlaps",0,0,'a'},
         {"ligate",0,0,'l'},
         {"output",1,0,'o'},
@@ -599,13 +601,14 @@ int main_vcfconcat(int argc, char *argv[])
         {0,0,0,0}
     };
     char *tmp;
-    while ((c = getopt_long(argc, argv, "h:?o:O:f:alq:D:r:R:c",loptions,NULL)) >= 0)
+    while ((c = getopt_long(argc, argv, "h:?o:O:f:alq:Dd:r:R:c",loptions,NULL)) >= 0)
     {
         switch (c) {
             case 'c': args->compact_PS = 1; break;
             case 'r': args->regions_list = optarg; break;
             case 'R': args->regions_list = optarg; args->regions_is_file = 1; break;
-            case 'D': args->remove_dups = optarg; break;
+            case 'd': args->remove_dups = optarg; break;
+            case 'D': args->remove_dups = "none"; break;
             case 'q': 
                 args->min_PQ = strtol(optarg,&tmp,10);
                 if ( *tmp ) error("Could not parse argument: --min-PQ %s\n", optarg);
