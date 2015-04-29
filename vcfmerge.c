@@ -30,6 +30,7 @@ THE SOFTWARE.  */
 #include <htslib/vcf.h>
 #include <htslib/synced_bcf_reader.h>
 #include <htslib/vcfutils.h>
+#include <htslib/regidx.h>
 #include <math.h>
 #include <ctype.h>
 #include "bcftools.h"
@@ -109,8 +110,8 @@ typedef struct
     AGR_info_t *AGR_info;
     int nAGR_info, mAGR_info;
     bcf_srs_t *files;
-    int gvcf_min, gvcf_max;
-    gvcf_aux_t *gvcf;   // buffer of gVCF lines
+    int gvcf_min, gvcf_max; // min and max buffered gvcf END position
+    gvcf_aux_t *gvcf;       // buffer of gVCF lines
     int *has_line;  // which files are being merged
 }
 maux_t;
@@ -119,6 +120,7 @@ typedef struct
 {
     vcmp_t *vcmp;
     maux_t *maux;
+    regidx_t *regs;    // apply regions only after the blocks are expanded
     int header_only, collapse, output_type, force_samples, merge_by_id, do_gvcf;
     char *header_fname, *output_fname, *regions_list, *info_rules, *file_list;
     info_rule_t *rules;
@@ -1604,23 +1606,25 @@ void gvcf_flush(args_t *args, int pos)
     bcf_srs_t *files = args->files;
     if ( maux->gvcf_max )   // there is a cached gVCF line
     {
-        if ( maux->gvcf_min )
+        if ( !args->regs || regidx_overlap(args->regs,bcf_seqname(args->out_hdr,args->out_line),args->out_line->pos,args->out_line->pos,NULL) )
         {
-            int32_t end_pos = pos < maux->gvcf_min ? pos-1 : maux->gvcf_min;
-            end_pos++;  // from 0-based to 1-based coordinate
-            bcf_update_info_int32(args->out_hdr, args->out_line, "END", &end_pos, 1);
+            if ( maux->gvcf_min )
+            {
+                int32_t end_pos = pos < maux->gvcf_min ? pos-1 : maux->gvcf_min;
+                end_pos++;  // from 0-based to 1-based coordinate
+                bcf_update_info_int32(args->out_hdr, args->out_line, "END", &end_pos, 1);
+            }
+            else
+                bcf_update_info_int32(args->out_hdr, args->out_line, "END", NULL, 0);
+            bcf_write1(args->out_fh, args->out_hdr, args->out_line);
         }
-        else
-            bcf_update_info_int32(args->out_hdr, args->out_line, "END", NULL, 0);
-        bcf_write1(args->out_fh, args->out_hdr, args->out_line);
         bcf_clear1(args->out_line);
-        //args->out_line->unpacked = BCF_UN_ALL;
 
         maux->gvcf_max = 0;
         for (i=0; i<files->nreaders; i++)
         {
             // which of the buffered gVCF blocks are still valid
-            if ( gaux[i].end && gaux[i].end <= pos ) gaux[i].end = 0;
+            if ( gaux[i].end && gaux[i].end < pos ) gaux[i].end = 0;
             else gaux[i].line->pos = pos;
             if ( maux->gvcf_max < gaux[i].end ) maux->gvcf_max = gaux[i].end;
             if ( !ref && maux->has_line[i] )
@@ -1701,18 +1705,11 @@ void gvcf_flush(args_t *args, int pos)
 void merge_line(args_t *args, int pos)
 {
     bcf1_t *out = args->out_line;
-//if ( args->do_gvcf )
-//{
-//fprintf(stderr,"merge_line: %d, min,max=%d %d: ", pos+1, args->maux->gvcf_min,args->maux->gvcf_max);
-//int i; for (i=0; i<args->files->nreaders; i++) fprintf(stderr,"\t%d", args->maux->gvcf[i].end ? args->maux->gvcf[i].end+1 : 0); fprintf(stderr,"\n");
-//}
 
-    if ( args->do_gvcf ) gvcf_flush(args, pos);
+    if ( args->do_gvcf )
+        gvcf_flush(args, pos);
     else
-    {
         bcf_clear1(out);
-        //out->unpacked = BCF_UN_ALL;
-    }
 
     merge_chrom2qual(args, out);
     merge_filter(args, out);
@@ -2123,6 +2120,9 @@ void merge_vcf(args_t *args)
     {
         merge_buffer(args);
     }
+    if ( args->do_gvcf )
+        gvcf_flush(args, INT_MAX);
+
     info_rules_destroy(args);
     maux_destroy(args->maux);
     bcf_hdr_destroy(args->out_hdr);
@@ -2227,8 +2227,23 @@ int main_vcfmerge(int argc, char *argv[])
     if ( argc-optind<2 && !args->file_list ) usage();
 
     args->files->require_index = 1;
-    if ( args->regions_list && bcf_sr_set_regions(args->files, args->regions_list, regions_is_file)<0 )
-        error("Failed to read the regions: %s\n", args->regions_list);
+    if ( args->regions_list )
+    {
+        if ( bcf_sr_set_regions(args->files, args->regions_list, regions_is_file)<0 )
+            error("Failed to read the regions: %s\n", args->regions_list);
+        if ( args->do_gvcf )
+        {
+            if ( regions_is_file )
+                args->regs = regidx_init(args->regions_list,NULL,NULL,sizeof(char*),NULL);
+            else
+            {
+                args->regs = regidx_init(NULL,regidx_parse_reg,NULL,sizeof(char*),NULL);
+                if ( regidx_insert_list(args->regs,args->regions_list,',') !=0 ) error("Could not parse the regions: %s\n", args->regions_list);
+                regidx_insert(args->regs,NULL);
+            }
+            if ( !args->regs ) error("Could not parse the regions: %s\n", args->regions_list);
+        }
+    }
 
     while (optind<argc)
     {
@@ -2247,6 +2262,7 @@ int main_vcfmerge(int argc, char *argv[])
     }
     merge_vcf(args);
     bcf_sr_destroy(args->files);
+    if ( args->regs ) regidx_destroy(args->regs);
     free(args);
     return 0;
 }
