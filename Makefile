@@ -29,7 +29,7 @@ TEST_PROG=  test/test-rbuf
 all: $(PROG) $(TEST_PROG)
 
 # Adjust $(HTSDIR) to point to your top-level htslib directory
-HTSDIR = ../htslib
+HTSDIR = htslib
 include $(HTSDIR)/htslib.mk
 HTSLIB = $(HTSDIR)/libhts.a
 BGZIP  = $(HTSDIR)/bgzip
@@ -112,10 +112,10 @@ test-plugins: $(PROG) plugins test/test-rbuf $(BGZIP) $(TABIX)
 PLATFORM := $(shell uname -s)
 ifeq "$(PLATFORM)" "Darwin"
 SHLIB_FLAVOUR = dylib
-htslib_shared: $(HTSDIR)/libhts.dylib
+htslib_shared = $(HTSDIR)/libhts.dylib
 else
 SHLIB_FLAVOUR = so
-htslib_shared: $(HTSDIR)/libhts.so
+htslib_shared = $(HTSDIR)/libhts.so
 endif
 
 # Plugin rules
