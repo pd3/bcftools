@@ -52,15 +52,14 @@
         The most up to date development version can be obtained from github
         using these commands:
         <ul style='list-style-type:none;margin-left:-1em;'>
-            <li>git clone --branch=develop git://github.com/pd3/htslib.git
-            <li>git clone --branch=develop git://github.com/pd3/bcftools.git
+            <li>git clone --branch=develop --recursive git://github.com/pd3/bcftools.git
             <li>cd bcftools; make
         </ul>
         The <em>clone</em> command above is used to create a local copy of the remote repository and needs to be run only once.
         Whenever the latest snapshot from github is needed, use instead the <em>pull</em> command:
         <ul style='list-style-type:none;margin-left:-1em;'>
-            <li>cd htslib; git pull
-            <li>cd ../bcftools; git pull
+            <li>cd bcftools
+            <li>git pull
             <li>make clean && make
         </ul>
       </section>
