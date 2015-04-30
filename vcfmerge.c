@@ -1606,9 +1606,31 @@ void gvcf_flush(args_t *args, int pos)
     bcf_srs_t *files = args->files;
     if ( maux->gvcf_max )   // there is a cached gVCF line
     {
-        if ( !args->regs || regidx_overlap(args->regs,bcf_seqname(args->out_hdr,args->out_line),args->out_line->pos,args->out_line->pos,NULL) )
+        // If we are called on a region, chop off the external part
+        int rstart = -1, rend = -1;
+        if ( args->regs )
         {
-            if ( maux->gvcf_min )
+            regitr_t itr;
+            const char *chr = bcf_seqname(args->out_hdr,args->out_line);
+            if ( regidx_overlap(args->regs,chr,args->out_line->pos,pos,&itr) )
+            {
+                // In case there are multiple regions, we treat them as one
+                rstart = REGITR_START(itr);
+                while ( REGITR_OVERLAP(itr,args->out_line->pos,pos) ) itr.i++;
+                itr.i--;
+                rend = REGITR_END(itr);
+            }
+
+            // When the incoming record (pos) happens to be at the start of the 
+            // region, drop all previous blocks
+            if ( rstart == pos ) rstart = -1;
+            else if ( rstart > args->out_line->pos ) args->out_line->pos = rstart;
+            if ( rend < maux->gvcf_min ) maux->gvcf_min = rend;
+        }
+
+        if ( !args->regs || rstart!=-1 )
+        {
+            if ( maux->gvcf_min && maux->gvcf_min!=args->out_line->pos )
             {
                 int32_t end_pos = pos < maux->gvcf_min ? pos-1 : maux->gvcf_min;
                 end_pos++;  // from 0-based to 1-based coordinate
