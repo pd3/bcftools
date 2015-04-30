@@ -197,6 +197,7 @@ int vcf_write_line(htsFile *fp, kstring_t *line);
 static void phase_update(args_t *args, bcf_hdr_t *hdr, bcf1_t *rec)
 {
     int i, nGTs = bcf_get_genotypes(hdr, rec, &args->GTa, &args->mGTa);
+    if ( nGTs <= 0 ) return;    // GT field is not present
     for (i=0; i<bcf_hdr_nsamples(hdr); i++)
     {
         if ( !args->swap_phase[i] ) continue;
