@@ -156,7 +156,7 @@ vcfquery.o: vcfquery.c $(htslib_vcf_h) $(htslib_synced_bcf_reader_h) $(htslib_vc
 vcfroh.o: vcfroh.c $(roh_h)
 vcfcnv.o: vcfcnv.c $(cnv_h)
 vcfsom.o: vcfsom.c $(htslib_vcf_h) $(htslib_synced_bcf_reader_h) $(htslib_vcfutils_h) $(bcftools_h)
-vcfstats.o: vcfstats.c $(htslib_vcf_h) $(htslib_synced_bcf_reader_h) $(htslib_vcfutils_h) $(htslib_faidx_h) $(bcftools_h)
+vcfstats.o: vcfstats.c $(htslib_vcf_h) $(htslib_synced_bcf_reader_h) $(htslib_vcfutils_h) $(htslib_faidx_h) $(bcftools_h) $(filter_h)
 vcfview.o: vcfview.c $(htslib_vcf_h) $(htslib_synced_bcf_reader_h) $(htslib_vcfutils_h) $(bcftools_h) $(filter_h)
 reheader.o: reheader.c $(htslib_vcf_h) $(htslib_bgzf_h) $(HTSDIR)/htslib/kseq.h $(bcftools_h)
 tabix.o: tabix.c $(htslib_bgzf_h) $(htslib_tbx_h)

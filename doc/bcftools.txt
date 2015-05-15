@@ -114,7 +114,7 @@ specific commands to see if they apply.
     is interpreted as standard input. Some tools may require tabix- or
     CSI-indexed files.
 
-*-c, --collapse* 'snps'|'indels'|'both'|'all'|'some'|'none'|'id'::
+*-c, --collapse* 'snps'|'indels'|'both'|'all'|'some'|'none'|'id'[[collapse_option]]::
     Controls  how to treat records with duplicate positions and defines compatible
     records across multiple input files. Here by "compatible" we mean records which
     should be considered as identical by the tools. For example, when performing
@@ -483,9 +483,14 @@ the *-a, --allow-overlaps* option is specified.
 *-a, --allow-overlaps*::
     First coordinate of the next file can precede last record of the current file.
 
+*-d, --rm-dups* 'snps'|'indels'|'both'|'all'|'none'::
+    If a record is present in multiple files, output only the first instance,
+    see *<<collapse_option,--collapse>>* in *<<common_options,Common Options>>*.
+    Requires *-a, --allow-overlaps*.
+
 *-D, --remove-duplicates*::
     If a record is present in multiple files, output only the first instance.
-    Requires *-a, --allow-overlaps*.
+    Alias for *-d none*.  Requires *-a, --allow-overlaps*.
 
 *-f, --file-list* 'FILE'::
     Read the list of files from a file.
@@ -998,6 +1003,10 @@ For "vertical" merge take a look at *<<norm,bcftools norm>>* instead.
 *-f, --apply-filters* 'LIST'::
     see *<<common_options,Common Options>>*
 
+*-F, --filter-logic* 'x'|'+'::
+    Set the output record to PASS if any of the inputs is PASS ('x'),
+    or apply all filters ('+'), which is the default.
+
 *-i, --info-rules* '-'|'TAG:METHOD'[,...]::
     Rules for merging INFO fields (scalars or vectors) or '-' to disable the
     default rules.  'METHOD' is one of 'sum', 'avg', 'min', 'max', 'join'.
@@ -1098,6 +1107,9 @@ performance of indel calling.
     Only generate pileup in region. Requires the BAM files to be indexed.  If
     used in conjunction with -l then considers the intersection of the two
     requests.
+
+*-s, --samples* 'LIST'::
+    Comma-separated list of samples to include.
 
 *-R, --ignore-RG*::
     Ignore RG tags. Treat all reads in one BAM as one sample.
@@ -1596,7 +1608,11 @@ columns.
 *--debug*::
     produce verbose per-site and per-sample output
 
-*-e, --exons* 'file.gz'::
+*-e, --exclude* 'EXPRESSION'::
+    exclude sites for which 'EXPRESSION' is true. For valid expressions see
+    *<<expressions,EXPRESSIONS>>*.
+
+*-E, --exons* 'file.gz'::
     tab-delimited file with exons for indel frameshifts statistics. The columns
     of the file are CHR, FROM, TO, with 1-based, inclusive, positions. The file
     is BGZF-compressed and indexed with tabix
@@ -1610,7 +1626,11 @@ columns.
 *-F, --fasta-ref* 'ref.fa'::
     faidx indexed reference sequence file to determine INDEL context
 
-*-i, --split-by-ID*::
+*-i, --include* 'EXPRESSION'::
+    include only sites for which 'EXPRESSION' is true. For valid expressions see
+    *<<expressions,EXPRESSIONS>>*.
+
+*-I, --split-by-ID*::
     collect stats separately for sites which have the ID column set ("known
     sites") or which do not have the ID column set ("novel sites").
 

@@ -2,12 +2,12 @@
 .\"     Title: bcftools
 .\"    Author: [see the "AUTHORS" section]
 .\" Generator: DocBook XSL Stylesheets v1.76.1 <http://docbook.sf.net/>
-.\"      Date: 2015-04-28 10:46 BST
+.\"      Date: 2015-05-15 09:36 BST
 .\"    Manual: \ \&
 .\"    Source: \ \&
 .\"  Language: English
 .\"
-.TH "BCFTOOLS" "1" "2015\-04\-28 10:46 BST" "\ \&" "\ \&"
+.TH "BCFTOOLS" "1" "2015\-05\-15 09:36 BST" "\ \&" "\ \&"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -41,7 +41,7 @@ Most commands accept VCF, bgzipped VCF and BCF with filetype detected automatica
 BCFtools is designed to work on a stream\&. It regards an input file "\-" as the standard input (stdin) and outputs to the standard output (stdout)\&. Several commands can thus be combined with Unix pipes\&.
 .SS "VERSION"
 .sp
-This manual page was last updated \fB2015\-04\-28 10:46 BST\fR and refers to bcftools git version \fB1\&.2\-59\-gf46a6e8+\fR\&.
+This manual page was last updated \fB2015\-05\-15 09:36 BST\fR and refers to bcftools git version \fB1\&.2\-79\-g7dfd140+\fR\&.
 .SS "BCF1"
 .sp
 The BCF1 format output by versions of samtools <= 0\&.1\&.19 is \fBnot\fR compatible with this version of bcftools\&. To read BCF1 files one can use the view command from old versions of bcftools packaged with samtools versions <= 0\&.1\&.19 to convert to VCF, which can then be read by this version of bcftools\&.
@@ -846,9 +846,19 @@ Concatenate or combine VCF/BCF files\&. All source files must have the same samp
 First coordinate of the next file can precede last record of the current file\&.
 .RE
 .PP
+\fB\-d, \-\-rm\-dups\fR \fIsnps\fR|\fIindels\fR|\fIboth\fR|\fIall\fR|\fInone\fR
+.RS 4
+If a record is present in multiple files, output only the first instance, see
+\fB\-\-collapse\fR
+in
+\fBCommon Options\fR\&. Requires
+\fB\-a, \-\-allow\-overlaps\fR\&.
+.RE
+.PP
 \fB\-D, \-\-remove\-duplicates\fR
 .RS 4
-If a record is present in multiple files, output only the first instance\&. Requires
+If a record is present in multiple files, output only the first instance\&. Alias for
+\fB\-d none\fR\&. Requires
 \fB\-a, \-\-allow\-overlaps\fR\&.
 .RE
 .PP
@@ -1726,6 +1736,11 @@ see
 \fBCommon Options\fR
 .RE
 .PP
+\fB\-F, \-\-filter\-logic\fR \fIx\fR|\fI+\fR
+.RS 4
+Set the output record to PASS if any of the inputs is PASS (\fIx\fR), or apply all filters (\fI+\fR), which is the default\&.
+.RE
+.PP
 \fB\-i, \-\-info\-rules\fR \fI\-\fR|\fITAG:METHOD\fR[,\&...]
 .RS 4
 Rules for merging INFO fields (scalars or vectors) or
@@ -1868,6 +1883,11 @@ Minimum base quality for a base to be considered
 \fB\-r, \-\-region\fR \fISTR\fR
 .RS 4
 Only generate pileup in region\&. Requires the BAM files to be indexed\&. If used in conjunction with \-l then considers the intersection of the two requests\&.
+.RE
+.PP
+\fB\-s, \-\-samples\fR \fILIST\fR
+.RS 4
+Comma\-separated list of samples to include\&.
 .RE
 .PP
 \fB\-R, \-\-ignore\-RG\fR
@@ -2765,7 +2785,15 @@ ranges of depth distribution: min, max, and size of the bin
 produce verbose per\-site and per\-sample output
 .RE
 .PP
-\fB\-e, \-\-exons\fR \fIfile\&.gz\fR
+\fB\-e, \-\-exclude\fR \fIEXPRESSION\fR
+.RS 4
+exclude sites for which
+\fIEXPRESSION\fR
+is true\&. For valid expressions see
+\fBEXPRESSIONS\fR\&.
+.RE
+.PP
+\fB\-E, \-\-exons\fR \fIfile\&.gz\fR
 .RS 4
 tab\-delimited file with exons for indel frameshifts statistics\&. The columns of the file are CHR, FROM, TO, with 1\-based, inclusive, positions\&. The file is BGZF\-compressed and indexed with tabix
 .RE
@@ -2791,7 +2819,15 @@ see
 faidx indexed reference sequence file to determine INDEL context
 .RE
 .PP
-\fB\-i, \-\-split\-by\-ID\fR
+\fB\-i, \-\-include\fR \fIEXPRESSION\fR
+.RS 4
+include only sites for which
+\fIEXPRESSION\fR
+is true\&. For valid expressions see
+\fBEXPRESSIONS\fR\&.
+.RE
+.PP
+\fB\-I, \-\-split\-by\-ID\fR
 .RS 4
 collect stats separately for sites which have the ID column set ("known sites") or which do not have the ID column set ("novel sites")\&.
 .RE
