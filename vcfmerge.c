@@ -1811,7 +1811,14 @@ void merge_line(args_t *args, int pos)
 
     if ( !args->maux->gvcf_max )
     {
-        bcf_write1(args->out_fh, args->out_hdr, out);
+        int print = 1;
+        if ( args->regs )
+        {
+            const char *chr = bcf_seqname(args->out_hdr,args->out_line);
+            if ( !regidx_overlap(args->regs,chr,args->out_line->pos,args->out_line->pos,NULL) ) print = 0;
+        }
+        if ( print )
+            bcf_write1(args->out_fh, args->out_hdr, out);
         bcf_clear1(out);
     }
 }
@@ -2254,18 +2261,15 @@ int main_vcfmerge(int argc, char *argv[])
     {
         if ( bcf_sr_set_regions(args->files, args->regions_list, regions_is_file)<0 )
             error("Failed to read the regions: %s\n", args->regions_list);
-        if ( args->do_gvcf )
+        if ( regions_is_file )
+            args->regs = regidx_init(args->regions_list,NULL,NULL,sizeof(char*),NULL);
+        else
         {
-            if ( regions_is_file )
-                args->regs = regidx_init(args->regions_list,NULL,NULL,sizeof(char*),NULL);
-            else
-            {
-                args->regs = regidx_init(NULL,regidx_parse_reg,NULL,sizeof(char*),NULL);
-                if ( regidx_insert_list(args->regs,args->regions_list,',') !=0 ) error("Could not parse the regions: %s\n", args->regions_list);
-                regidx_insert(args->regs,NULL);
-            }
-            if ( !args->regs ) error("Could not parse the regions: %s\n", args->regions_list);
+            args->regs = regidx_init(NULL,regidx_parse_reg,NULL,sizeof(char*),NULL);
+            if ( regidx_insert_list(args->regs,args->regions_list,',') !=0 ) error("Could not parse the regions: %s\n", args->regions_list);
+            regidx_insert(args->regs,NULL);
         }
+        if ( !args->regs ) error("Could not parse the regions: %s\n", args->regions_list);
     }
 
     while (optind<argc)
