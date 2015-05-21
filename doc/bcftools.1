@@ -2,28 +2,12 @@
 .\"     Title: bcftools
 .\"    Author: [see the "AUTHORS" section]
 .\" Generator: DocBook XSL Stylesheets v1.76.1 <http://docbook.sf.net/>
-<<<<<<< HEAD
-<<<<<<< HEAD
-.\"      Date: 2015-05-15 09:36 BST
-=======
-.\"      Date: 04/22/2015
->>>>>>> cd1ebd1... gvcf fill ref allele from fasta
-=======
-.\"      Date: 04/22/2015
->>>>>>> 31edb34... Merge pull request #244 from mcshane/feature/gvcf_fill_from_fasta
+.\"      Date: 2015-05-26 10:03 BST
 .\"    Manual: \ \&
 .\"    Source: \ \&
 .\"  Language: English
 .\"
-<<<<<<< HEAD
-<<<<<<< HEAD
-.TH "BCFTOOLS" "1" "2015\-05\-15 09:36 BST" "\ \&" "\ \&"
-=======
-.TH "BCFTOOLS" "1" "04/22/2015" "\ \&" "\ \&"
->>>>>>> cd1ebd1... gvcf fill ref allele from fasta
-=======
-.TH "BCFTOOLS" "1" "04/22/2015" "\ \&" "\ \&"
->>>>>>> 31edb34... Merge pull request #244 from mcshane/feature/gvcf_fill_from_fasta
+.TH "BCFTOOLS" "1" "2015\-05\-26 10:03 BST" "\ \&" "\ \&"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -57,13 +41,7 @@ Most commands accept VCF, bgzipped VCF and BCF with filetype detected automatica
 BCFtools is designed to work on a stream\&. It regards an input file "\-" as the standard input (stdin) and outputs to the standard output (stdout)\&. Several commands can thus be combined with Unix pipes\&.
 .SS "VERSION"
 .sp
-<<<<<<< HEAD
-<<<<<<< HEAD
-This manual page was last updated \fB2015\-05\-15 09:36 BST\fR and refers to bcftools git version \fB1\&.2\-79\-g7dfd140+\fR\&.
-=======
->>>>>>> cd1ebd1... gvcf fill ref allele from fasta
-=======
->>>>>>> 31edb34... Merge pull request #244 from mcshane/feature/gvcf_fill_from_fasta
+This manual page was last updated \fB2015\-05\-26 10:03 BST\fR and refers to bcftools git version \fB1\&.2\-100\-ge84b00b+\fR\&.
 .SS "BCF1"
 .sp
 The BCF1 format output by versions of samtools <= 0\&.1\&.19 is \fBnot\fR compatible with this version of bcftools\&. To read BCF1 files one can use the view command from old versions of bcftools packaged with samtools versions <= 0\&.1\&.19 to convert to VCF, which can then be read by this version of bcftools\&.
@@ -657,6 +635,9 @@ List of annotations to remove\&. Use "FILTER" to remove all filters or "FILTER/S
     # first indexing with tabix\&. The coordinates are 1\-based\&.
     tabix \-s1 \-b2 \-e2 annots\&.tab\&.gz
     bcftools annotate \-a annots\&.tab\&.gz \-h annots\&.hdr \-c CHROM,POS,REF,ALT,\-,TAG file\&.vcf
+
+    # Similar to the above, but add to the existing FILTER column
+    bcftools annotate \-a annots\&.tab\&.gz \-h annots\&.hdr \-c CHROM,POS,REF,ALT,\-,+FILTER file\&.vcf
 
     # Annotate from a tab\-delimited file with regions (1\-based coordinates, inclusive)
     tabix \-s1 \-b2 \-e3 annots\&.tab\&.gz
@@ -2122,6 +2103,18 @@ split multiallelic sites into biallelic records (\fI\-\fR) or join biallelic sit
 \fIsnps\fR; if both SNPs and indels should be merged separately into two records, specify
 \fIboth\fR; if SNPs and indels should be merged into a single record, specify
 \fIany\fR\&.
+.RE
+.PP
+\fB\-N, \-\-do\-not\-normalize\fR
+.RS 4
+the
+\fI\-c s\fR
+option can be used to fix or set the REF allele from the reference
+\fI\-f\fR\&. The
+\fI\-N\fR
+option will not turn on indel normalisation as the
+\fI\-f\fR
+option normally implies
 .RE
 .PP
 \fB\-o, \-\-output\fR \fIFILE\fR
