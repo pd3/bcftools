@@ -107,13 +107,6 @@ static void fix_ref(args_t *args, bcf1_t *line)
 
     args->nref.tot++;
 
-    // does REF contain non-standard bases?
-    if ( replace_iupac_codes(line->d.allele[0],strlen(line->d.allele[0])) )
-    {
-        args->nref.set++;
-        bcf_update_alleles(args->hdr,line,(const char**)line->d.allele,line->n_allele);
-    }
-
     // is the REF different?
     if ( !strncasecmp(line->d.allele[0],ref,reflen) ) { free(ref); return; }
 
@@ -125,6 +118,14 @@ static void fix_ref(args_t *args, bcf1_t *line)
         free(ref);
         bcf_update_alleles(args->hdr,line,(const char**)line->d.allele,line->n_allele);
         return;
+    }
+
+    // does REF contain non-standard bases?
+    if ( replace_iupac_codes(line->d.allele[0],strlen(line->d.allele[0])) )
+    {
+        args->nref.set++;
+        bcf_update_alleles(args->hdr,line,(const char**)line->d.allele,line->n_allele);
+        if ( !strncasecmp(line->d.allele[0],ref,reflen) ) { free(ref); return; }
     }
 
     // is it swapped?
