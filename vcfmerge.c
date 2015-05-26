@@ -123,7 +123,7 @@ typedef struct
     AGR_info_t *AGR_info;
     int nAGR_info, mAGR_info;
     bcf_srs_t *files;
-    int gvcf_min, gvcf_max; // min and max buffered gvcf END position
+    int gvcf_min, gvcf_max, prn_pos; // min and max buffered gvcf END position, last printed position
     gvcf_aux_t *gvcf;       // buffer of gVCF lines
 }
 maux_t;
@@ -412,7 +412,7 @@ static int info_rules_add_values(args_t *args, bcf_hdr_t *hdr, bcf1_t *line, inf
     int i, j;
     if ( var_len==BCF_VL_A )
     {
-        assert( ret==line->n_allele-1 );
+        if ( ret!=line->n_allele-1 ) error("Wrong number of %s fields at %s:%d\n",rule->hdr_tag,bcf_seqname(hdr,line),line->pos+1);
         args->maux->nagr_map = ret;
         hts_expand(int,args->maux->nagr_map,args->maux->magr_map,args->maux->agr_map);
         // create mapping from source file ALT indexes to dst file indexes
@@ -421,7 +421,7 @@ static int info_rules_add_values(args_t *args, bcf_hdr_t *hdr, bcf1_t *line, inf
     }
     else if ( var_len==BCF_VL_R )
     {
-        assert( ret==line->n_allele );
+        if ( ret!=line->n_allele ) error("Wrong number of %s fields at %s:%d\n",rule->hdr_tag,bcf_seqname(hdr,line),line->pos+1);
         args->maux->nagr_map = ret;
         hts_expand(int,args->maux->nagr_map,args->maux->magr_map,args->maux->agr_map);
         for (i=0; i<ret; i++) args->maux->agr_map[i] = als->map[i];
@@ -682,6 +682,7 @@ maux_t *maux_init(args_t *args)
     ma->smpl_ploidy = (int*) calloc(n_smpl,sizeof(int));
     ma->smpl_nGsize = (int*) malloc(n_smpl*sizeof(int));
     ma->buf = (buffer_t*) calloc(ma->n,sizeof(buffer_t));
+    ma->buf[0].rid = -1;
     return ma;
 }
 void maux_destroy(maux_t *ma)
@@ -1226,7 +1227,7 @@ void merge_info(args_t *args, bcf1_t *out)
                 out->d.info[out->n_info].vptr_off  = inf->vptr_off;
                 out->d.info[out->n_info].vptr_len  = inf->vptr_len;
                 out->d.info[out->n_info].vptr_free = 1;
-                out->d.info[out->n_info].vptr = (uint8_t*) malloc(inf->vptr_len+inf->vptr_off);
+                out->d.info[out->n_info].vptr = (uint8_t*) malloc(inf->vptr_len+inf->vptr_off); 
                 memcpy(out->d.info[out->n_info].vptr,inf->vptr-inf->vptr_off, inf->vptr_len+inf->vptr_off);
                 out->d.info[out->n_info].vptr += inf->vptr_off;
                 if ( (args->output_type & FT_BCF) && id!=bcf_hdr_id2int(hdr, BCF_DT_ID, key) )
@@ -1238,8 +1239,6 @@ void merge_info(args_t *args, bcf1_t *out)
             }
         }
     }
-    //out->d.info = ma->inf;
-    //out->d.m_info = ma->minf;
     for (i=0; i<args->nrules; i++)
         args->rules[i].merger(args->out_hdr, out, &args->rules[i]);
     for (i=0; i<ma->nAGR_info; i++)
@@ -1642,13 +1641,18 @@ void merge_format(args_t *args, bcf1_t *out)
     out->d.indiv_dirty = 1;
 }
 
-void gvcf_flush(args_t *args, int pos)
+// output and stage the next gvcf line
+void gvcf_stage(args_t *args, int pos)
 {
     maux_t *maux = args->maux;
     gvcf_aux_t *gaux = maux->gvcf;
     char *ref = NULL;
     int i;
     bcf_srs_t *files = args->files;
+//#define DBG 1
+#if DBG
+fprintf(stderr,"stage %d,  gvcf_max=%d\n",pos==INT_MAX?pos:pos+1,maux->gvcf_max+1);
+#endif
     if ( maux->gvcf_max )   // there is a cached gVCF block which extends to pos=gvcf_max
     {
         // If we are called on a region, chop off the external part
@@ -1667,33 +1671,56 @@ void gvcf_flush(args_t *args, int pos)
             }
 
             // When the incoming record (pos) happens to be at the start of the 
-            // region, drop all previous blocks
+            // region, drop all previous records
             if ( rstart == pos ) rstart = -1;
             else if ( rstart > args->out_line->pos ) args->out_line->pos = rstart;
             if ( rend < maux->gvcf_min ) maux->gvcf_min = rend;
         }
         if ( !args->regs || rstart!=-1 )
         {
-            // there is something to flush
+            // is there something to flush
+            int32_t end_pos = args->out_line->pos;
             if ( maux->gvcf_min && maux->gvcf_min!=args->out_line->pos )
+                end_pos = pos < maux->gvcf_min ? pos-1 : maux->gvcf_min;
+
+            if ( end_pos > args->out_line->pos )
             {
-                int32_t end_pos = pos < maux->gvcf_min ? pos-1 : maux->gvcf_min;
+                maux->prn_pos = end_pos;
                 end_pos++;  // from 0-based to 1-based coordinate
                 bcf_update_info_int32(args->out_hdr, args->out_line, "END", &end_pos, 1);
             }
             else
+            {
+                maux->prn_pos = 0;
                 bcf_update_info_int32(args->out_hdr, args->out_line, "END", NULL, 0);
+            }
 
             bcf_write1(args->out_fh, args->out_hdr, args->out_line);
+#if DBG
+fprintf(stderr,"written %d\n",args->out_line->pos+1);
+#endif
         }
         bcf_clear1(args->out_line);
 
         maux->gvcf_max = 0;
         for (i=0; i<files->nreaders; i++)
         {
+#if DBG
+fprintf(stderr,"    reader %d:  gaux_end=%d irec=%d\n",i,gaux[i].end?gaux[i].end+1:0,maux->buf[i].cur);
+#endif
             // Which of the buffered gVCF blocks are still valid?
-            if ( gaux[i].end && gaux[i].end < pos ) gaux[i].end = 0;    // does not extend that far, mark as done
-            else gaux[i].line->pos = pos;   // the block has been interrupted; update the starting position
+            if ( gaux[i].end )
+            {
+                if ( gaux[i].end < pos && pos!=INT_MAX ) gaux[i].end = 0;    // does not extend that far, mark as done
+                else if ( maux->buf[i].cur>=0 ) gaux[i].end = 0;  // this must be a gvcf block followed by an indel
+            }
+            gaux[i].line->pos = pos==INT_MAX ? maux->pos+1 : pos;
+
+//...            if ( gaux[i].end )....must set always?? gaux[i].line->pos = pos+1 or =pos?
+//            else gaux[i].line->pos = pos;   // the block has been interrupted; update the starting position
+#if DBG
+fprintf(stderr,"    reader %d:  gaux_end=%d\n",i,gaux[i].end?gaux[i].end+1:0);
+#endif
 
             // Update the maximum gvcf block length
             if ( maux->gvcf_max < gaux[i].end ) maux->gvcf_max = gaux[i].end;
@@ -1706,6 +1733,7 @@ void gvcf_flush(args_t *args, int pos)
                 ref = line->d.allele[0];
             }
         }
+        if ( !ref ) ref = "N";
     }
 
     maux->gvcf_min =  0;
@@ -1716,6 +1744,9 @@ void gvcf_flush(args_t *args, int pos)
     {
         // Is there a new record in this reader?
         int irec = maux->buf[i].cur;
+#if DBG
+fprintf(stderr,"    reader %d:  irec=%d  max=%d\n",i,irec,maux->gvcf_max+1);
+#endif
         if ( irec<0 ) 
         {
             // There is no record in this reader; because the block was interrupted, its REF allele must be updated.
@@ -1732,11 +1763,18 @@ void gvcf_flush(args_t *args, int pos)
             continue;
         }
 
-        assert( !gaux[i].end ); // i think this must be always true
-
-        // There is a new record in this reader
         bcf_hdr_t *hdr = bcf_sr_get_header(files, i);
         bcf1_t *line = args->files->readers[i].buffer[irec];
+#if DBG
+fprintf(stderr,"    %d .. %s,%s\n", i,line->d.allele[0],line->d.allele[1]);
+#endif
+
+        // There can be an indel, so the POS can actually match END. Unsure if we can
+        // simply ignore this case
+      //  assert( !gaux[i].end ); // i think this must be always true
+//        fprintf(stderr,"pos=%d ir=%d  %s,%s  ref=%s\n",pos+1,i,line->d.allele[0],line->d.allele[1],ref);
+
+        // There is a new record in this reader
         int ret = bcf_get_info_int32(hdr,line,"END",&end,&nend);
         if ( ret==1 )
         {
@@ -1792,7 +1830,57 @@ void gvcf_flush(args_t *args, int pos)
             }
         }
     }
+    //if ( pos==INT_MAX )
+    //{
+    //    //for (i=0; i<files->nreaders; i++) gaux[i].end = 0;
+    //    maux->gvcf_max = 0;
+    //}
+#if DBG
+fprintf(stderr,"    flush done, gvcf_max=%d\n", maux->gvcf_max);
+#endif
 }
+
+// Limitation: we set N for the REF in last gvcf block, because we don't know
+// the reference allele which follows after the last interruption. We need to
+// accept -f fasta as a parameter, 
+//
+void gvcf_flush(args_t *args, int done)
+{
+    int i;
+    maux_t *maux = args->maux;
+    gvcf_aux_t *gaux = maux->gvcf;
+
+    if ( !done )    // just checking for a new chromosome
+    {
+        if ( maux->buf[0].rid<0 ) return;   // first chromosome
+
+        for (i=0; i<maux->n; i++)
+            if ( bcf_sr_has_line(maux->files,i) ) break;
+        bcf1_t *line = bcf_sr_get_line(maux->files,i);
+        if ( line->rid==maux->buf[i].rid ) return;  // still on the same chr
+    }
+
+    // flush needed
+    for (i=0; i<args->files->nreaders; i++) 
+        maux->buf[i].cur = -1;
+
+    // this flushes any staged records
+    gvcf_stage(args,INT_MAX);
+
+    if ( maux->gvcf_max && maux->prn_pos!=maux->gvcf_max )
+    {
+        bcf1_t *out = args->out_line;
+        merge_chrom2qual(args, out);
+        merge_filter(args, out);
+        merge_info(args, out);
+        merge_format(args, out);
+        bcf_write1(args->out_fh, args->out_hdr, out);
+        bcf_clear1(out);
+        for (i=0; i<args->files->nreaders; i++) gaux[i].end = 0;
+    }
+    maux->gvcf_max = 0;
+}
+
 
 // The core merging function, one or none line from each reader
 void merge_line(args_t *args, int pos)
@@ -1800,7 +1888,7 @@ void merge_line(args_t *args, int pos)
     bcf1_t *out = args->out_line;
 
     if ( args->do_gvcf )
-        gvcf_flush(args, pos);
+        gvcf_stage(args, pos);
     else
         bcf_clear1(out);
 
@@ -1811,6 +1899,7 @@ void merge_line(args_t *args, int pos)
 
     if ( !args->maux->gvcf_max )
     {
+        // this a normal record, no buffered gvcf lines
         int print = 1;
         if ( args->regs )
         {
@@ -1822,7 +1911,6 @@ void merge_line(args_t *args, int pos)
         bcf_clear1(out);
     }
 }
-
 
 void debug_buffers(FILE *fp, bcf_srs_t *files);
 void debug_buffer(FILE *fp, bcf_sr_t *reader);
@@ -1895,7 +1983,7 @@ void debug_maux(args_t *args)
 int can_merge(args_t *args)
 {
     bcf_srs_t *files = args->files;
-    int snp_mask = (VCF_SNP<<1)|(VCF_MNP<<1);
+    int snp_mask = (VCF_SNP<<1)|(VCF_MNP<<1), indel_mask = VCF_INDEL<<1, ref_mask = 1;
     maux_t *maux = args->maux;
     char *id = NULL;
     maux->var_types = maux->nals = 0;
@@ -1917,11 +2005,10 @@ int can_merge(args_t *args)
             else
             {
                 int var_type = bcf_get_variant_types(reader->buffer[j]);
-                maux->var_types |= var_type<<1;
+                maux->var_types |= var_type ? var_type<<1 : 1;
             }
         }
     }
-
     if ( !ntodo ) return 0;
 
 
@@ -1939,6 +2026,7 @@ int can_merge(args_t *args)
 
             bcf1_t *line = reader->buffer[j];
             int line_type = bcf_get_variant_types(line);
+            line_type = line_type ? line_type<<1 : 1;
 
             // select relevant lines
             if ( args->merge_by_id )
@@ -1951,7 +2039,7 @@ int can_merge(args_t *args)
                 {
                     // All alleles of the tested record must be present in the
                     // selected maux record plus variant types must be the same
-                    if ( (maux->var_types & (line->d.var_type<<1)) != maux->var_types ) continue;
+                    if ( (maux->var_types & line_type) != maux->var_types ) continue;
                     if ( vcmp_set_ref(args->vcmp,maux->als[0],line->d.allele[0]) < 0 ) continue;   // refs not compatible
                     for (k=1; k<line->n_allele; k++)
                     {
@@ -1965,7 +2053,11 @@ int can_merge(args_t *args)
                     //  - SNPs+SNPs+MNPs+REF if -w both,snps
                     //  - indels+indels+REF  if -w both,indels, REF only if SNPs are not present
                     //  - SNPs come first
-                    if ( line_type&VCF_INDEL && !((line_type<<1)&snp_mask) && maux->var_types&snp_mask ) continue;  // SNPs come first
+                    if ( line_type & indel_mask )
+                    {
+                        if ( !(line_type&snp_mask) && maux->var_types&snp_mask ) continue;  // SNPs come first
+                        if ( args->do_gvcf && maux->var_types&ref_mask ) continue;  // never merge indels with gVCF blocks
+                    }
                 }
             }
             buf->rec[j].skip = 0;
@@ -2132,19 +2224,19 @@ void merge_vcf(args_t *args)
     args->maux = maux_init(args);
     args->out_line = bcf_init1();
     args->tmph = kh_init(strdict);
-    int ret,i;
-    while ( (ret=bcf_sr_next_line(args->files)) )
+    while ( bcf_sr_next_line(args->files) )
     {
+        if ( args->do_gvcf )
+            gvcf_flush(args,0);
+
         maux_reset(args->maux);
         while ( can_merge(args) )
             merge_buffer(args);
+
         clean_buffer(args);
     }
     if ( args->do_gvcf )
-    {
-        for (i=0; i<args->files->nreaders; i++) args->maux->buf[i].cur = -1;
-        gvcf_flush(args, INT_MAX);
-    }
+        gvcf_flush(args,1);
 
     info_rules_destroy(args);
     maux_destroy(args->maux);
