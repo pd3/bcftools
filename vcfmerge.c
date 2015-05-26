@@ -1672,7 +1672,7 @@ fprintf(stderr,"stage %d,  gvcf_max=%d\n",pos==INT_MAX?pos:pos+1,maux->gvcf_max+
 
             // When the incoming record (pos) happens to be at the start of the 
             // region, drop all previous records
-            if ( rstart == pos ) rstart = -1;
+            if ( rstart == pos && rstart!=args->out_line->pos ) rstart = -1;
             else if ( rstart > args->out_line->pos ) args->out_line->pos = rstart;
             if ( rend < maux->gvcf_min ) maux->gvcf_min = rend;
         }
@@ -1715,12 +1715,6 @@ fprintf(stderr,"    reader %d:  gaux_end=%d irec=%d\n",i,gaux[i].end?gaux[i].end
                 else if ( maux->buf[i].cur>=0 ) gaux[i].end = 0;  // this must be a gvcf block followed by an indel
             }
             gaux[i].line->pos = pos==INT_MAX ? maux->pos+1 : pos;
-
-//...            if ( gaux[i].end )....must set always?? gaux[i].line->pos = pos+1 or =pos?
-//            else gaux[i].line->pos = pos;   // the block has been interrupted; update the starting position
-#if DBG
-fprintf(stderr,"    reader %d:  gaux_end=%d\n",i,gaux[i].end?gaux[i].end+1:0);
-#endif
 
             // Update the maximum gvcf block length
             if ( maux->gvcf_max < gaux[i].end ) maux->gvcf_max = gaux[i].end;
@@ -1768,11 +1762,6 @@ fprintf(stderr,"    reader %d:  irec=%d  max=%d\n",i,irec,maux->gvcf_max+1);
 #if DBG
 fprintf(stderr,"    %d .. %s,%s\n", i,line->d.allele[0],line->d.allele[1]);
 #endif
-
-        // There can be an indel, so the POS can actually match END. Unsure if we can
-        // simply ignore this case
-      //  assert( !gaux[i].end ); // i think this must be always true
-//        fprintf(stderr,"pos=%d ir=%d  %s,%s  ref=%s\n",pos+1,i,line->d.allele[0],line->d.allele[1],ref);
 
         // There is a new record in this reader
         int ret = bcf_get_info_int32(hdr,line,"END",&end,&nend);
@@ -1830,11 +1819,6 @@ fprintf(stderr,"    %d .. %s,%s\n", i,line->d.allele[0],line->d.allele[1]);
             }
         }
     }
-    //if ( pos==INT_MAX )
-    //{
-    //    //for (i=0; i<files->nreaders; i++) gaux[i].end = 0;
-    //    maux->gvcf_max = 0;
-    //}
 #if DBG
 fprintf(stderr,"    flush done, gvcf_max=%d\n", maux->gvcf_max);
 #endif
@@ -1871,10 +1855,19 @@ void gvcf_flush(args_t *args, int done)
     {
         bcf1_t *out = args->out_line;
         merge_chrom2qual(args, out);
-        merge_filter(args, out);
-        merge_info(args, out);
-        merge_format(args, out);
-        bcf_write1(args->out_fh, args->out_hdr, out);
+        int do_print = 1;
+        if ( args->regs )
+        {
+            const char *chr = bcf_seqname(args->out_hdr,args->out_line);
+            if ( !regidx_overlap(args->regs,chr,args->out_line->pos,args->out_line->pos,NULL) ) do_print = 0;
+        }
+        if ( do_print )
+        {
+            merge_filter(args, out);
+            merge_info(args, out);
+            merge_format(args, out);
+            bcf_write1(args->out_fh, args->out_hdr, out);
+        }
         bcf_clear1(out);
         for (i=0; i<args->files->nreaders; i++) gaux[i].end = 0;
     }
