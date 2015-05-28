@@ -117,11 +117,13 @@ static char **add_sample(void *name2idx, char **lines, int *nlines, int *mlines,
     return lines;
 }
 
-static char **parse_ped_samples(call_t *call, char **vals, int nvals)
+// only 5 columns are required and the first is ignored:
+//  ignored,sample,father(or 0),mother(or 0),sex(1=M,2=F)
+static char **parse_ped_samples(call_t *call, char **vals, int nvals, int *nsmpl)
 {
     int i, j, mlines = 0, nlines = 0;
-    kstring_t str = {0,0,0};
-    void *name2fam = khash_str2int_init(), *name2idx = khash_str2int_init();
+    kstring_t str = {0,0,0}, fam_str = {0,0,0};
+    void *name2idx = khash_str2int_init();
     char **lines = NULL;
     for (i=0; i<nvals; i++)
     {
@@ -144,35 +146,29 @@ static char **parse_ped_samples(call_t *call, char **vals, int nvals)
         }
         if ( j!=5 ) break;
 
-        int ifam, ret = khash_str2int_get(name2fam, str.s, &ifam);
-        family_t *fam = ret==0 ? &call->fams[ifam] : NULL;
-        if ( !fam )
+        char sex = col_ends[3][1]=='1' ? 'M' : 'F';
+        lines = add_sample(name2idx, lines, &nlines, &mlines, col_ends[0]+1, sex, &j);
+        if ( strcmp(col_ends[1]+1,"0") && strcmp(col_ends[2]+1,"0") )   // father and mother
         {
             call->nfams++;
             hts_expand(family_t, call->nfams, call->mfams, call->fams);
-            fam = &call->fams[call->nfams-1];
-            fam->name = strdup(str.s);
-            for (j=0; j<3; j++) fam->sample[j] = -1;
-            khash_str2int_set(name2fam, fam->name, call->nfams-1);
-        }
+            family_t *fam = &call->fams[call->nfams-1];
+            fam_str.l = 0;
+            ksprintf(&fam_str,"father=%s, mother=%s, child=%s", col_ends[1]+1,col_ends[2]+1,col_ends[0]+1);
+            fam->name = strdup(fam_str.s);
 
-        char sex = col_ends[3][1]=='1' ? 'M' : 'F';
-        lines = add_sample(name2idx, lines, &nlines, &mlines, col_ends[0]+1, sex, &j);
-        if ( strcmp(col_ends[1]+1,"0") )    // father
-        {
-            if ( fam->sample[CHILD]>=0 ) error("Multiple childs in %s [%s,%s]\n", str.s, lines[j],lines[fam->sample[CHILD]]);
-            fam->sample[CHILD] = j;
-            if ( fam->sample[FATHER]>=0 ) error("Two fathers in %s?\n", str.s);
-            lines = add_sample(name2idx, lines, &nlines, &mlines, col_ends[1]+1, 'M', &fam->sample[FATHER]);
-        }
-        if ( strcmp(col_ends[2]+1,"0") )    // mother
-        {
-            if ( fam->sample[MOTHER]>=0 ) error("Two mothers in %s?\n", str.s);
-            lines = add_sample(name2idx, lines, &nlines, &mlines, col_ends[2]+1, 'F', &fam->sample[MOTHER]);
+            if ( !khash_str2int_has_key(name2idx, col_ends[1]+1) )
+                lines = add_sample(name2idx, lines, &nlines, &mlines, col_ends[1]+1, 'M', &fam->sample[FATHER]);
+            if ( !khash_str2int_has_key(name2idx, col_ends[2]+1) )
+                lines = add_sample(name2idx, lines, &nlines, &mlines, col_ends[2]+1, 'F', &fam->sample[MOTHER]);
+
+            khash_str2int_get(name2idx, col_ends[0]+1, &fam->sample[CHILD]);
+            khash_str2int_get(name2idx, col_ends[1]+1, &fam->sample[FATHER]);
+            khash_str2int_get(name2idx, col_ends[2]+1, &fam->sample[MOTHER]);
         }
     }
     free(str.s);
-    khash_str2int_destroy(name2fam);
+    free(fam_str.s);
     khash_str2int_destroy_free(name2idx);
 
     if ( i!=nvals ) // not a ped file
@@ -180,13 +176,7 @@ static char **parse_ped_samples(call_t *call, char **vals, int nvals)
         if ( i>0 ) error("Could not parse samples, not a PED format.\n");
         return NULL;
     }
-    assert( nlines==nvals );
-    for (i=0; i<call->nfams; i++)
-        assert( call->fams[i].sample[0]>=0 && call->fams[i].sample[1]>=0 && call->fams[i].sample[2]>=0 ); // multiple childs, not a trio
-
-    // for (i=0; i<call->nfams; i++)
-    //     fprintf(stderr,"mother=%s, father=%s, child=%s\n", lines[call->fams[i].sample[MOTHER]],lines[call->fams[i].sample[FATHER]],lines[call->fams[i].sample[CHILD]]);
-
+    *nsmpl = nlines;
     return lines;
 }
 
@@ -203,12 +193,14 @@ static void set_samples(args_t *args, const char *fn, int is_file)
     char **lines = hts_readlist(fn, is_file, &nlines);
     if ( !lines ) error("Could not read the file: %s\n", fn);
 
-    char **smpls = parse_ped_samples(&args->aux, lines, nlines);
+    int nsmpls;
+    char **smpls = parse_ped_samples(&args->aux, lines, nlines, &nsmpls);
     if ( smpls )
     {
         for (i=0; i<nlines; i++) free(lines[i]);
         free(lines);
         lines = smpls;
+        nlines = nsmpls;
     }
 
     args->samples_map = (int*) malloc(sizeof(int)*bcf_hdr_nsamples(args->aux.hdr)); // for subsetting
@@ -334,6 +326,11 @@ static void init_data(args_t *args)
     if ( args->samples_fname )
     {
         set_samples(args, args->samples_fname, args->samples_is_file);
+        if ( args->aux.flag&CALL_CONSTR_TRIO )
+        {
+            if ( 3*args->aux.nfams!=args->nsamples ) error("Expected only trios in %s, sorry!\n", args->samples_fname);
+            fprintf(stderr,"Detected %d samples in %d trio families\n", args->nsamples,args->aux.nfams);
+        }
         args->nsex = ploidy_nsex(args->ploidy);
         args->sex2ploidy = (int*) calloc(args->nsex,sizeof(int));
         args->sex2ploidy_prev = (int*) calloc(args->nsex,sizeof(int));

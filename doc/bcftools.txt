@@ -196,7 +196,26 @@ specific commands to see if they apply.
     *<<ploidy,--ploidy>>*, for example "F" or "M"), and can parse also PED
     files. If the second column is not present,
     the sex "F" is assumed.
-    With *<<call,bcftools call>> -C* 'trio', PED file is expected.
+    With *<<call,bcftools call>> -C* 'trio', PED file is expected. File
+    formats examples:
+----
+    sample1    1
+    sample2    2
+    sample3    2
+
+  or
+
+    sample1    M
+    sample2    F
+    sample3    F
+
+  or a .ped file (here is shown a minimum working example, the first column is 
+  ignored and the last indicates sex: 1=male, 2=female)
+
+    ignored daughterA fatherA motherA 2
+    ignored sonB fatherB motherB 1
+----
+
 
 
 *-t, --targets* \[&#94;]'chr'|'chr:pos'|'chr:from-to'|'chr:from-'[,...]::
