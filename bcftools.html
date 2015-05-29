@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8" /><title>bcftools</title><link rel="stylesheet" type="text/css" href="docbook-xsl.css" /><meta name="generator" content="DocBook XSL Stylesheets V1.76.1" /></head><body><div xml:lang="en" class="refentry" title="bcftools" lang="en"><a id="idp25137504"></a><div class="titlepage"></div><div class="refnamediv"><h2>Name</h2><p>bcftools — utilities for variant calling and manipulating VCFs and BCFs.</p></div><div class="refsynopsisdiv" title="Synopsis"><a id="_synopsis"></a><h2>Synopsis</h2><p><span class="strong"><strong>bcftools</strong></span> [<span class="emphasis"><em>COMMAND</em></span>] [<span class="emphasis"><em>OPTIONS</em></span>]</p></div><div class="refsect1" title="DESCRIPTION"><a id="_description"></a><h2>DESCRIPTION</h2><p>BCFtools  is  a set of utilities that manipulate variant calls in the Variant
+<html xmlns="http://www.w3.org/1999/xhtml"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8" /><title>bcftools</title><link rel="stylesheet" type="text/css" href="docbook-xsl.css" /><meta name="generator" content="DocBook XSL Stylesheets V1.76.1" /></head><body><div xml:lang="en" class="refentry" title="bcftools" lang="en"><a id="idp25073776"></a><div class="titlepage"></div><div class="refnamediv"><h2>Name</h2><p>bcftools — utilities for variant calling and manipulating VCFs and BCFs.</p></div><div class="refsynopsisdiv" title="Synopsis"><a id="_synopsis"></a><h2>Synopsis</h2><p><span class="strong"><strong>bcftools</strong></span> [<span class="emphasis"><em>COMMAND</em></span>] [<span class="emphasis"><em>OPTIONS</em></span>]</p></div><div class="refsect1" title="DESCRIPTION"><a id="_description"></a><h2>DESCRIPTION</h2><p>BCFtools  is  a set of utilities that manipulate variant calls in the Variant
 Call Format (VCF) and its binary counterpart BCF. All commands work
 transparently with both VCFs and BCFs, both uncompressed and BGZF-compressed.</p><p>Most commands accept VCF, bgzipped VCF and BCF with filetype detected
 automatically even when streaming from a pipe. Indexed VCF and BCF
 will work in all situations. Un-indexed VCF and BCF and streams will
 work in most, but not all situations.</p><p>BCFtools is designed to work on a stream. It regards an input file "-" as the
 standard input (stdin) and outputs to the standard output (stdout). Several
-commands can thus be  combined  with  Unix pipes.</p><div class="refsect2" title="VERSION"><a id="_version"></a><h3>VERSION</h3><p>This manual page was last updated <span class="strong"><strong>2015-04-28 10:46 BST</strong></span> and refers to bcftools git version <span class="strong"><strong>1.2-59-gf46a6e8+</strong></span>.</p></div><div class="refsect2" title="BCF1"><a id="_bcf1"></a><h3>BCF1</h3><p>The BCF1 format output by versions of samtools &lt;= 0.1.19 is <span class="strong"><strong>not</strong></span>
+commands can thus be  combined  with  Unix pipes.</p><div class="refsect2" title="VERSION"><a id="_version"></a><h3>VERSION</h3><p>This manual page was last updated <span class="strong"><strong>2015-05-29 14:57 BST</strong></span> and refers to bcftools git version <span class="strong"><strong>1.2-108-gbab25ab+</strong></span>.</p></div><div class="refsect2" title="BCF1"><a id="_bcf1"></a><h3>BCF1</h3><p>The BCF1 format output by versions of samtools &lt;= 0.1.19 is <span class="strong"><strong>not</strong></span>
 compatible with this version of bcftools. To read BCF1 files one can use
 the view command from old versions of bcftools packaged with samtools
 versions &lt;= 0.1.19 to convert to VCF, which can then be read by
@@ -63,7 +63,7 @@ specific commands to see if they apply.</p><div class="variablelist"><dl><dt><sp
     is interpreted as standard input. Some tools may require tabix- or
     CSI-indexed files.
 </dd><dt><span class="term">
-<span class="strong"><strong>-c, --collapse</strong></span> <span class="emphasis"><em>snps</em></span>|<span class="emphasis"><em>indels</em></span>|<span class="emphasis"><em>both</em></span>|<span class="emphasis"><em>all</em></span>|<span class="emphasis"><em>some</em></span>|<span class="emphasis"><em>none</em></span>|<span class="emphasis"><em>id</em></span>
+<span class="strong"><strong>-c, --collapse</strong></span> <span class="emphasis"><em>snps</em></span>|<span class="emphasis"><em>indels</em></span>|<span class="emphasis"><em>both</em></span>|<span class="emphasis"><em>all</em></span>|<span class="emphasis"><em>some</em></span>|<span class="emphasis"><em>none</em></span>|<span class="emphasis"><em>id</em></span><a id="collapse_option"></a>
 </span></dt><dd><p class="simpara">
     Controls  how to treat records with duplicate positions and defines compatible
     records across multiple input files. Here by "compatible" we mean records which
@@ -159,8 +159,23 @@ specific commands to see if they apply.</p><div class="variablelist"><dl><dt><sp
     <span class="strong"><strong><a class="link" href="#ploidy">--ploidy</a></strong></span>, for example "F" or "M"), and can parse also PED
     files. If the second column is not present,
     the sex "F" is assumed.
-    With <span class="strong"><strong><a class="link" href="#call" title="bcftools call [OPTIONS] FILE">bcftools call</a> -C</strong></span> <span class="emphasis"><em>trio</em></span>, PED file is expected.
-</dd><dt><span class="term">
+    With <span class="strong"><strong><a class="link" href="#call" title="bcftools call [OPTIONS] FILE">bcftools call</a> -C</strong></span> <span class="emphasis"><em>trio</em></span>, PED file is expected. File
+    formats examples:
+</dd></dl></div><pre class="screen">    sample1    1
+    sample2    2
+    sample3    2
+
+  or
+
+    sample1    M
+    sample2    F
+    sample3    F
+
+  or a .ped file (here is shown a minimum working example, the first column is
+  ignored and the last indicates sex: 1=male, 2=female)
+
+    ignored daughterA fatherA motherA 2
+    ignored sonB fatherB motherB 1</pre><div class="variablelist"><dl><dt><span class="term">
 <span class="strong"><strong>-t, --targets</strong></span> [^]<span class="emphasis"><em>chr</em></span>|<span class="emphasis"><em>chr:pos</em></span>|<span class="emphasis"><em>chr:from-to</em></span>|<span class="emphasis"><em>chr:from-</em></span>[,…]
 </span></dt><dd>
     Similar as <span class="strong"><strong>-r, --regions</strong></span>, but the next position is accessed by streaming the
@@ -305,6 +320,9 @@ specific commands to see if they apply.</p><div class="variablelist"><dl><dt><sp
     tabix -s1 -b2 -e2 annots.tab.gz
     bcftools annotate -a annots.tab.gz -h annots.hdr -c CHROM,POS,REF,ALT,-,TAG file.vcf
 
+    # Similar to the above, but add to the existing FILTER column
+    bcftools annotate -a annots.tab.gz -h annots.hdr -c CHROM,POS,REF,ALT,-,+FILTER file.vcf
+
     # Annotate from a tab-delimited file with regions (1-based coordinates, inclusive)
     tabix -s1 -b2 -e3 annots.tab.gz
     bcftools annotate -a annots.tab.gz -h annots.hdr -c CHROM,FROM,TO,TAG inut.vcf
@@ -442,10 +460,16 @@ the <span class="strong"><strong>-a, --allow-overlaps</strong></span> option is 
 </span></dt><dd>
     First coordinate of the next file can precede last record of the current file.
 </dd><dt><span class="term">
+<span class="strong"><strong>-d, --rm-dups</strong></span> <span class="emphasis"><em>snps</em></span>|<span class="emphasis"><em>indels</em></span>|<span class="emphasis"><em>both</em></span>|<span class="emphasis"><em>all</em></span>|<span class="emphasis"><em>none</em></span>
+</span></dt><dd>
+    If a record is present in multiple files, output only the first instance,
+    see <span class="strong"><strong><a class="link" href="#collapse_option">--collapse</a></strong></span> in <span class="strong"><strong><a class="link" href="#common_options" title="Common Options">Common Options</a></strong></span>.
+    Requires <span class="strong"><strong>-a, --allow-overlaps</strong></span>.
+</dd><dt><span class="term">
 <span class="strong"><strong>-D, --remove-duplicates</strong></span>
 </span></dt><dd>
     If a record is present in multiple files, output only the first instance.
-    Requires <span class="strong"><strong>-a, --allow-overlaps</strong></span>.
+    Alias for <span class="strong"><strong>-d none</strong></span>.  Requires <span class="strong"><strong>-a, --allow-overlaps</strong></span>.
 </dd><dt><span class="term">
 <span class="strong"><strong>-f, --file-list</strong></span> <span class="emphasis"><em>FILE</em></span>
 </span></dt><dd>
@@ -582,6 +606,10 @@ the <span class="strong"><strong>-a, --allow-overlaps</strong></span> option is 
 </span></dt><dd>
     convert gVCF to VCF, expanding REF blocks into sites. Only sites
     with FILTER set to "PASS" or "." will be expanded.
+</dd><dt><span class="term">
+<span class="strong"><strong>-f, --fasta-ref</strong></span> <span class="emphasis"><em>file</em></span>
+</span></dt><dd>
+    reference sequence in fasta format. Must be indexed with samtools faidx
 </dd></dl></div></div><div class="refsect3" title="HAPS/SAMPLE conversion:"><a id="_haps_sample_conversion"></a><h4>HAPS/SAMPLE conversion:</h4><div class="variablelist"><dl><dt><span class="term">
 <span class="strong"><strong>--hapsample2vcf</strong></span> <span class="emphasis"><em>prefix</em></span> or <span class="emphasis"><em>haps-file</em></span>,<span class="emphasis"><em>sample-file</em></span>
 </span></dt><dd>
@@ -650,7 +678,7 @@ the <span class="strong"><strong>-a, --allow-overlaps</strong></span> option is 
 </dd><dt><span class="term">
 <span class="strong"><strong>-f, --fasta-ref</strong></span> <span class="emphasis"><em>file</em></span>
 </span></dt><dd>
-    reference sequence in fasta format
+    reference sequence in fasta format. Must be indexed with samtools faidx
 </dd><dt><span class="term">
 <span class="strong"><strong>-s, --samples</strong></span> <span class="emphasis"><em>LIST</em></span>
 </span></dt><dd>
@@ -876,10 +904,10 @@ in the other files.</p><div class="variablelist"><dl><dt><span class="term">
     include only sites for which <span class="emphasis"><em>EXPRESSION</em></span> is true. See discussion
     of <span class="strong"><strong>-e, --exclude</strong></span> above.
 </dd><dt><span class="term">
-<span class="strong"><strong>-n, --nfiles</strong></span> [+-=]<span class="emphasis"><em>INT</em></span>
+<span class="strong"><strong>-n, --nfiles</strong></span> [+-=]<span class="emphasis"><em>INT</em></span>|~<span class="emphasis"><em>BITMAP</em></span>
 </span></dt><dd>
-    output positions present in this many (=), this many or more (+), or this
-    many or fewer (-) files
+    output positions present in this many (=), this many or more (+), this
+    many or fewer (-), or the exact same (~) files
 </dd><dt><span class="term">
 <span class="strong"><strong>-o, --output</strong></span> <span class="emphasis"><em>FILE</em></span>
 </span></dt><dd>
@@ -914,7 +942,7 @@ in the other files.</p><div class="variablelist"><dl><dt><span class="term">
 </span></dt><dd>
     list of input files to output given as 1-based indices. With <span class="strong"><strong>-p</strong></span> and no
     <span class="strong"><strong>-w</strong></span>, all files are written.
-</dd></dl></div><div class="refsect3" title="Examples:"><a id="_examples"></a><h4>Examples:</h4><p>Create intersection and complements of two sets saving the output in dir/*</p><pre class="screen">    bcftools isec -p dir A.vcf.gz B.vcf.gz</pre><p>Filter sites in A and B (but not in C) and create intersection</p><pre class="screen">    bcftools isec -e'MAF&lt;0.01' -i'dbSNP=1' -e- A.vcf.gz B.vcf.gz C.vcf.gz -p dir</pre><p>Extract and write records from A shared by both A and B using exact allele match</p><pre class="screen">    bcftools isec -p dir -n=2 -w1 A.vcf.gz B.vcf.gz</pre><p>Extract records private to A or B comparing by position only</p><pre class="screen">    bcftools isec -p dir -n-1 -c all A.vcf.gz B.vcf.gz</pre></div></div><div class="refsect2" title="bcftools merge [OPTIONS] A.vcf.gz B.vcf.gz […]"><a id="merge"></a><h3>bcftools merge [<span class="emphasis"><em>OPTIONS</em></span>] <span class="emphasis"><em>A.vcf.gz</em></span> <span class="emphasis"><em>B.vcf.gz</em></span> […]</h3><p>Merge multiple VCF/BCF files from non-overlapping sample sets to create one
+</dd></dl></div><div class="refsect3" title="Examples:"><a id="_examples"></a><h4>Examples:</h4><p>Create intersection and complements of two sets saving the output in dir/*</p><pre class="screen">    bcftools isec -p dir A.vcf.gz B.vcf.gz</pre><p>Filter sites in A and B (but not in C) and create intersection</p><pre class="screen">    bcftools isec -e'MAF&lt;0.01' -i'dbSNP=1' -e- A.vcf.gz B.vcf.gz C.vcf.gz -p dir</pre><p>Extract and write records from A shared by both A and B using exact allele match</p><pre class="screen">    bcftools isec -p dir -n=2 -w1 A.vcf.gz B.vcf.gz</pre><p>Extract records private to A or B comparing by position only</p><pre class="screen">    bcftools isec -p dir -n-1 -c all A.vcf.gz B.vcf.gz</pre><p>Print a list of records which are present in A and B but not in C and D</p><pre class="screen">    bcftools isec -n~1100 -c all A.vcf.gz B.vcf.gz C.vcf.gz D.vcf.gz</pre></div></div><div class="refsect2" title="bcftools merge [OPTIONS] A.vcf.gz B.vcf.gz […]"><a id="merge"></a><h3>bcftools merge [<span class="emphasis"><em>OPTIONS</em></span>] <span class="emphasis"><em>A.vcf.gz</em></span> <span class="emphasis"><em>B.vcf.gz</em></span> […]</h3><p>Merge multiple VCF/BCF files from non-overlapping sample sets to create one
 multi-sample file.  For example, when merging file <span class="emphasis"><em>A.vcf.gz</em></span> containing
 samples <span class="emphasis"><em>S1</em></span>, <span class="emphasis"><em>S2</em></span> and <span class="emphasis"><em>S3</em></span> and file <span class="emphasis"><em>B.vcf.gz</em></span> containing samples <span class="emphasis"><em>S3</em></span> and
 <span class="emphasis"><em>S4</em></span>, the output file will contain four samples named <span class="emphasis"><em>S1</em></span>, <span class="emphasis"><em>S2</em></span>, <span class="emphasis"><em>S3</em></span>, <span class="emphasis"><em>2:S3</em></span>
@@ -941,6 +969,11 @@ For "vertical" merge take a look at <span class="strong"><strong><a class="link"
 <span class="strong"><strong>-f, --apply-filters</strong></span> <span class="emphasis"><em>LIST</em></span>
 </span></dt><dd>
     see <span class="strong"><strong><a class="link" href="#common_options" title="Common Options">Common Options</a></strong></span>
+</dd><dt><span class="term">
+<span class="strong"><strong>-F, --filter-logic</strong></span> <span class="emphasis"><em>x</em></span>|<span class="emphasis"><em>+</em></span>
+</span></dt><dd>
+    Set the output record to PASS if any of the inputs is PASS (<span class="emphasis"><em>x</em></span>),
+    or apply all filters (<span class="emphasis"><em>+</em></span>), which is the default.
 </dd><dt><span class="term">
 <span class="strong"><strong>-i, --info-rules</strong></span> <span class="emphasis"><em>-</em></span>|<span class="emphasis"><em>TAG:METHOD</em></span>[,…]
 </span></dt><dd>
@@ -1049,6 +1082,10 @@ performance of indel calling.</p><div class="refsect3" title="Input options"><a 
     Only generate pileup in region. Requires the BAM files to be indexed.  If
     used in conjunction with -l then considers the intersection of the two
     requests.
+</dd><dt><span class="term">
+<span class="strong"><strong>-s, --samples</strong></span> <span class="emphasis"><em>LIST</em></span>
+</span></dt><dd>
+    Comma-separated list of samples to include.
 </dd><dt><span class="term">
 <span class="strong"><strong>-R, --ignore-RG</strong></span>
 </span></dt><dd>
@@ -1175,6 +1212,12 @@ multiple rows.</p><div class="variablelist"><dl><dt><span class="term">
     both SNPs and indels should be merged separately into two records, specify
     <span class="emphasis"><em>both</em></span>; if SNPs and indels should be merged into a single record, specify
     <span class="emphasis"><em>any</em></span>.
+</dd><dt><span class="term">
+<span class="strong"><strong>-N, --do-not-normalize</strong></span>
+</span></dt><dd>
+    the <span class="emphasis"><em>-c s</em></span> option can be used to fix or set the REF allele from the
+    reference <span class="emphasis"><em>-f</em></span>. The <span class="emphasis"><em>-N</em></span> option will not turn on indel normalisation
+    as the <span class="emphasis"><em>-f</em></span> option normally implies
 </dd><dt><span class="term">
 <span class="strong"><strong>-o, --output</strong></span> <span class="emphasis"><em>FILE</em></span>
 </span></dt><dd>
@@ -1395,6 +1438,11 @@ void destroy(void);</pre></div></div><div class="refsect2" title="bcftools query
 </span></dt><dd>
     see <span class="strong"><strong><a class="link" href="#common_options" title="Common Options">Common Options</a></strong></span>
 </dd><dt><span class="term">
+<span class="strong"><strong>-u, --allow-undef-tags</strong></span>
+</span></dt><dd>
+    do not throw an error if there are undefined tags in the format string,
+    print "." instead
+</dd><dt><span class="term">
 <span class="strong"><strong>-v, --vcf-list</strong></span> <span class="emphasis"><em>FILE</em></span>
 </span></dt><dd>
     process multiple VCFs listed in the file
@@ -1535,7 +1583,12 @@ columns.</p><div class="variablelist"><dl><dt><span class="term">
 </span></dt><dd>
     produce verbose per-site and per-sample output
 </dd><dt><span class="term">
-<span class="strong"><strong>-e, --exons</strong></span> <span class="emphasis"><em>file.gz</em></span>
+<span class="strong"><strong>-e, --exclude</strong></span> <span class="emphasis"><em>EXPRESSION</em></span>
+</span></dt><dd>
+    exclude sites for which <span class="emphasis"><em>EXPRESSION</em></span> is true. For valid expressions see
+    <span class="strong"><strong><a class="link" href="#expressions" title="EXPRESSIONS">EXPRESSIONS</a></strong></span>.
+</dd><dt><span class="term">
+<span class="strong"><strong>-E, --exons</strong></span> <span class="emphasis"><em>file.gz</em></span>
 </span></dt><dd>
     tab-delimited file with exons for indel frameshifts statistics. The columns
     of the file are CHR, FROM, TO, with 1-based, inclusive, positions. The file
@@ -1549,7 +1602,12 @@ columns.</p><div class="variablelist"><dl><dt><span class="term">
 </span></dt><dd>
     faidx indexed reference sequence file to determine INDEL context
 </dd><dt><span class="term">
-<span class="strong"><strong>-i, --split-by-ID</strong></span>
+<span class="strong"><strong>-i, --include</strong></span> <span class="emphasis"><em>EXPRESSION</em></span>
+</span></dt><dd>
+    include only sites for which <span class="emphasis"><em>EXPRESSION</em></span> is true. For valid expressions see
+    <span class="strong"><strong><a class="link" href="#expressions" title="EXPRESSIONS">EXPRESSIONS</a></strong></span>.
+</dd><dt><span class="term">
+<span class="strong"><strong>-I, --split-by-ID</strong></span>
 </span></dt><dd>
     collect stats separately for sites which have the ID column set ("known
     sites") or which do not have the ID column set ("novel sites").
