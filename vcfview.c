@@ -221,7 +221,10 @@ static void init_data(args_t *args)
 
     // headers: hdr=full header, hsub=subset header, hnull=sites only header
     if (args->sites_only)
+    {
         args->hnull = bcf_hdr_subset(args->hdr, 0, 0, 0);
+        bcf_hdr_remove(args->hnull,BCF_HL_FMT,NULL);
+    }
     if (args->n_samples > 0)
     {
         args->hsub = bcf_hdr_subset(args->hdr, args->n_samples, args->samples, args->imap);
