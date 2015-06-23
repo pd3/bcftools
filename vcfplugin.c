@@ -500,7 +500,7 @@ int main_plugin(int argc, char *argv[])
         {"targets-file",1,0,'T'},
         {0,0,0,0}
     };
-    while ((c = getopt_long(argc, argv, "h?o:O:r:R:li:e:vV",loptions,NULL)) >= 0)
+    while ((c = getopt_long(argc, argv, "h?o:O:r:R:t:T:li:e:vV",loptions,NULL)) >= 0)
     {
         switch (c) {
             case 'V': version_only = 1; break;
