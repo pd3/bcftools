@@ -87,11 +87,18 @@ typedef struct {
 } mplp_conf_t;
 
 typedef struct {
+    char *ref[2];
+    int ref_id[2];
+    int ref_len[2];
+} mplp_ref_t;
+
+#define MPLP_REF_INIT {{NULL,NULL},{-1,-1},{0,0}}
+
+typedef struct {
     samFile *fp;
     hts_itr_t *iter;
     bam_hdr_t *h;
-    int ref_id;
-    char *ref;
+    mplp_ref_t *ref;
     const mplp_conf_t *conf;
     void *rghash_inc;   // whitelist for readgroups on per-bam basis
 } mplp_aux_t;
@@ -102,13 +109,71 @@ typedef struct {
     bam_pileup1_t **plp;
 } mplp_pileup_t;
 
+static int mplp_get_ref(mplp_aux_t *ma, int tid,  char **ref, int *ref_len) {
+    mplp_ref_t *r = ma->ref;
+
+    //printf("get ref %d {%d/%p, %d/%p}\n", tid, r->ref_id[0], r->ref[0], r->ref_id[1], r->ref[1]);
+
+    if (!r || !ma->conf->fai) {
+        *ref = NULL;
+        return 0;
+    }
+
+    // Do we need to reference count this so multiple mplp_aux_t can
+    // track which references are in use?
+    // For now we just cache the last two. Sufficient?
+    if (tid == r->ref_id[0]) {
+        *ref = r->ref[0];
+        *ref_len = r->ref_len[0];
+        return 1;
+    }
+    if (tid == r->ref_id[1]) {
+        // Last, swap over
+        int tmp;
+        tmp = r->ref_id[0];  r->ref_id[0]  = r->ref_id[1];  r->ref_id[1]  = tmp;
+        tmp = r->ref_len[0]; r->ref_len[0] = r->ref_len[1]; r->ref_len[1] = tmp;
+
+        char *tc;
+        tc = r->ref[0]; r->ref[0] = r->ref[1]; r->ref[1] = tc;
+        *ref = r->ref[0];
+        *ref_len = r->ref_len[0];
+        return 1;
+    }
+
+    // New, so migrate to old and load new
+    if (r->ref[1])
+        free(r->ref[1]);
+    r->ref[1]     = r->ref[0];
+    r->ref_id[1]  = r->ref_id[0];
+    r->ref_len[1] = r->ref_len[0];
+
+    r->ref_id[0] = tid;
+    r->ref[0] = faidx_fetch_seq(ma->conf->fai,
+                                ma->h->target_name[r->ref_id[0]],
+                                0,
+                                0x7fffffff,
+                                &r->ref_len[0]);
+
+    if (!r->ref) {
+        r->ref[0] = NULL;
+        r->ref_id[0] = -1;
+        r->ref_len[0] = 0;
+        *ref = NULL;
+        return 0;
+    }
+
+    *ref = r->ref[0];
+    *ref_len = r->ref_len[0];
+    return 1;
+}
+
 static int mplp_func(void *data, bam1_t *b)
 {
+    char *ref;
     mplp_aux_t *ma = (mplp_aux_t*)data;
-    int ret, skip = 0;
+    int ret, skip = 0, ref_len;
     do {
         int has_ref;
-        skip = 0;
         ret = ma->iter? sam_itr_next(ma->fp, ma->iter, b) : sam_read1(ma->fp, ma->h, b);
         if (ret < 0) break;
         // The 'B' cigar operation is not part of the specification, considering as obsolete.
@@ -141,11 +206,21 @@ static int mplp_func(void *data, bam1_t *b)
             for (i = 0; i < b->core.l_qseq; ++i)
                 qual[i] = qual[i] > 31? qual[i] - 31 : 0;
         }
-        has_ref = (ma->ref && ma->ref_id == b->core.tid)? 1 : 0;
+        if (ma->conf->fai && b->core.tid >= 0) {
+            has_ref = mplp_get_ref(ma, b->core.tid, &ref, &ref_len);
+            if (has_ref && ref_len <= b->core.pos) { // exclude reads outside of the reference sequence
+                fprintf(stderr,"[%s] Skipping because %d is outside of %d [ref:%d]\n",
+                        __func__, b->core.pos, ref_len, b->core.tid);
+                skip = 1;
+                continue;
+            }
+        } else {
+            has_ref = 0;
+        }
         skip = 0;
-        if (has_ref && (ma->conf->flag&MPLP_REALN)) bam_prob_realn_core(b, ma->ref, (ma->conf->flag & MPLP_REDO_BAQ)? 7 : 3);
+        if (has_ref && (ma->conf->flag&MPLP_REALN)) bam_prob_realn_core(b, ref, (ma->conf->flag & MPLP_REDO_BAQ)? 7 : 3);
         if (has_ref && ma->conf->capQ_thres > 10) {
-            int q = bam_cap_mapQ(b, ma->ref, ma->conf->capQ_thres);
+            int q = bam_cap_mapQ(b, ref, ma->conf->capQ_thres);
             if (q < 0) skip = 1;
             else if (b->core.qual > q) b->core.qual = q;
         }
@@ -218,8 +293,9 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
     extern void *bcf_call_add_rg(void *rghash, const char *hdtext, const char *list);
     extern void bcf_call_del_rghash(void *rghash);
     mplp_aux_t **data;
-    int i, tid, pos, *n_plp, tid0 = -1, beg0 = 0, end0 = 1u<<29, ref_len, ref_tid = -1, max_depth, max_indel_depth;
+    int i, tid, pos, *n_plp, beg0 = 0, end0 = 1u<<29, ref_len, max_depth, max_indel_depth;
     const bam_pileup1_t **plp;
+    mplp_ref_t mp_ref = MPLP_REF_INIT;
     bam_mplp_t iter;
     bam_hdr_t *h = NULL; /* header of first file in input list */
     char *ref;
@@ -272,8 +348,17 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             fprintf(stderr, "[%s] failed to open %s: %s\n", __func__, fn[i], strerror(errno));
             exit(1);
         }
-        hts_set_fai_filename(data[i]->fp, conf->fai_fname);
+        if (hts_set_opt(data[i]->fp, CRAM_OPT_DECODE_MD, 0)) {
+            fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
+            exit(1);
+        }
+        if (conf->fai_fname && hts_set_fai_filename(data[i]->fp, conf->fai_fname) != 0) {
+            fprintf(stderr, "[%s] failed to process %s: %s\n",
+                    __func__, conf->fai_fname, strerror(errno));
+            exit(1);
+        }
         data[i]->conf = conf;
+        data[i]->ref = &mp_ref;
         h_tmp = sam_hdr_read(data[i]->fp);
         if ( !h_tmp ) {
             fprintf(stderr,"[%s] fail to read the header of %s\n", __func__, fn[i]);
@@ -294,13 +379,20 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
                 fprintf(stderr, "[E::%s] fail to parse region '%s'\n", __func__, conf->reg);
                 exit(1);
             }
-            if (i == 0) tid0 = data[i]->iter->tid, beg0 = data[i]->iter->beg, end0 = data[i]->iter->end;
+            if (i == 0) beg0 = data[i]->iter->beg, end0 = data[i]->iter->end;
             hts_idx_destroy(idx);
         }
+        else
+            data[i]->iter = NULL;
+
         if (i == 0) h = h_tmp; /* save the header of first file in list */
         else {
-            // FIXME: to check consistency
+            // FIXME: to check consistency  and h_tmp
             bam_hdr_destroy(h_tmp);
+            
+            // we store only the first file's header; it's (alleged to be)
+            // compatible with the i-th file's target_name lookup needs
+            data[i]->h = h;
         }
     }
     // allocate data storage proportionate to number of samples being studied sm->n
@@ -409,12 +501,6 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         }
     }
 
-    if (tid0 >= 0 && conf->fai) { // region is set
-        ref = faidx_fetch_seq(conf->fai, h->target_name[tid0], 0, 0x7fffffff, &ref_len);
-        ref_tid = tid0;
-        for (i = 0; i < n; ++i) data[i]->ref = ref, data[i]->ref_id = tid0;
-    } else ref_tid = -1, ref = 0;
-
     // begin pileup
     iter = bam_mplp_init(n, mplp_func, (void**)data);
     if ( conf->flag & MPLP_SMART_OVERLAPS ) bam_mplp_init_overlaps(iter);
@@ -432,13 +518,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
     while ( (ret=bam_mplp_auto(iter, &tid, &pos, n_plp, plp)) > 0) {
         if (conf->reg && (pos < beg0 || pos >= end0)) continue; // out of the region requested
         if (conf->bed && tid >= 0 && !regidx_overlap(conf->bed, h->target_name[tid], pos, pos, NULL)) continue;
-        if (tid != ref_tid) {
-            free(ref); ref = 0;
-            if (conf->fai) ref = faidx_fetch_seq(conf->fai, h->target_name[tid], 0, 0x7fffffff, &ref_len);
-            for (i = 0; i < n; ++i) data[i]->ref = ref, data[i]->ref_id = tid;
-            ref_tid = tid;
-        }
-
+        mplp_get_ref(data[0], tid, &ref, &ref_len);
         int total_depth, _ref0, ref16;
         for (i = total_depth = 0; i < n; ++i) total_depth += n_plp[i];
         group_smpl(&gplp, sm, &buf, n, fn, n_plp, plp, conf->flag & MPLP_IGNORE_RG);
@@ -495,7 +575,9 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         if ( data[i]->rghash_inc ) khash_str2int_destroy_free(data[i]->rghash_inc);
         free(data[i]);
     }
-    free(data); free(plp); free(ref); free(n_plp);
+    free(data); free(plp); free(n_plp);
+    if (mp_ref.ref[0]) free(mp_ref.ref[0]);
+    if (mp_ref.ref[1]) free(mp_ref.ref[1]);
     if ( samples_inc ) khash_str2int_destroy_free(samples_inc);
     return ret;
 }
