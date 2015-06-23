@@ -103,6 +103,7 @@ static void fix_ref(args_t *args, bcf1_t *line)
 
     char *ref = faidx_fetch_seq(args->fai, (char*)bcf_seqname(args->hdr,line), line->pos, line->pos+maxlen-1, &len);
     if ( !ref ) error("faidx_fetch_seq failed at %s:%d\n", bcf_seqname(args->hdr,line),line->pos+1);
+
     replace_iupac_codes(ref,len);
 
     args->nref.tot++;

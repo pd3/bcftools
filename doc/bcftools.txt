@@ -26,7 +26,7 @@ bcftools - utilities for variant calling and manipulating VCFs and BCFs.
 
 SYNOPSIS
 --------
-*bcftools* ['COMMAND'] ['OPTIONS']
+*bcftools* [--version|--version-only] [--help] ['COMMAND'] ['OPTIONS']
 
 
 DESCRIPTION
@@ -163,6 +163,9 @@ specific commands to see if they apply.
 
 *-O, --output-type* 'b'|'u'|'z'|'v'::
     Output compressed BCF ('b'), uncompressed BCF ('u'), compressed VCF ('z'), uncompressed VCF ('v').
+    Use the -Ou option when piping between bcftools subcommands to speed up
+    performance by removing unecessary compression/decompression and
+    VCF<-->BCF conversion.
 
 *-r, --regions* 'chr'|'chr:pos'|'chr:from-to'|'chr:from-'[,...]::
     Comma-separated list of regions, see also *-R, --regions-file*. Note
@@ -1828,10 +1831,23 @@ Convert between VCF and BCF. Former *bcftools subset*.
     comma-separated list of variant types to exclude
 
 *-x, --private*::
-    print sites where only the subset samples carry an non-reference allele
+    print sites where only the subset samples carry an non-reference allele.
+    Requires --samples or --samples-file.
 
 *-X, --exclude-private*::
     exclude sites where only the subset samples carry an non-reference allele
+
+[[help]]
+=== bcftools help ['COMMAND'] | bcftools --help ['COMMAND']
+Display  a  brief usage message listing the bcftools commands available.  If the name of a command is also given, e.g., bcftools help view, the detailed usage message for that particular command is displayed.
+
+[[version]]
+=== bcftools ['--version'|'-v']
+Display the version numbers and copyright information for bcftools and the important libraries used by bcftools.
+
+[[version-only]]
+=== bcftools ['--version-only']
+Display the full bcftools version number in a machine-readable format.
 
 
 [[expressions]]
@@ -1880,9 +1896,9 @@ These filtering expressions are accepted by *<<annotate,annotate>>*,
 
         FlagA=1 && FlagB=0
 
-* "." to test missing values in INFO tags
+* "." to test missing values
 
-        DP=".", DP!="."
+        DP=".", DP!=".", ALT="."
 
 * TYPE for variant type in REF,ALT columns (indel,snp,mnp,ref,other)
 
