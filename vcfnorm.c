@@ -1574,8 +1574,8 @@ static void normalize_vcf(args_t *args)
             if ( prev_rid>=0 && prev_rid==line->rid && prev_pos==line->pos )
             {
                 if ( (args->rmdup>>1)&COLLAPSE_ANY ) continue;
-                if ( (args->rmdup>>1)&COLLAPSE_SNPS && line_type&(VCF_SNP|VCF_MNP) ) continue;
-                if ( (args->rmdup>>1)&COLLAPSE_INDELS && line_type&(VCF_INDEL) ) continue;
+                if ( (args->rmdup>>1)&COLLAPSE_SNPS && line_type&(VCF_SNP|VCF_MNP) && prev_type&(VCF_SNP|VCF_MNP) ) continue;
+                if ( (args->rmdup>>1)&COLLAPSE_INDELS && line_type&(VCF_INDEL) && prev_type&(VCF_INDEL) ) continue;
             }
             else
             {
