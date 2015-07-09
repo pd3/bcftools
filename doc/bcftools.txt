@@ -397,7 +397,12 @@ demand. The original calling model can be invoked with the *-c* option.
 *-O, --output-type* 'b'|'u'|'z'|'v'::
     see *<<common_options,Common Options>>*
 
-*--ploidy* 'FILE'[[ploidy]]::
+*--ploidy* 'ASSEMBLY'['?'][[ploidy]]::
+    predefined ploidy, use 'list' (or any other unused word) to print a list
+    of all predefined assemblies. Append a question mark to print the actual
+    definition. See also *--ploidy-file*.
+
+*--ploidy-file* 'FILE'::
     ploidy definition given as a space/tab-delimited list of
     CHROM, FROM, TO, SEX, PLOIDY. The SEX codes are arbitrary and
     correspond to the ones used by *<<samples_file,--samples-file>>*. Unlisted

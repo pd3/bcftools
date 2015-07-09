@@ -117,6 +117,61 @@ static char **add_sample(void *name2idx, char **lines, int *nlines, int *mlines,
     return lines;
 }
 
+typedef struct
+{
+    const char *alias, *about, *ploidy;
+}
+ploidy_predef_t;
+
+static ploidy_predef_t ploidy_predefs[] =
+{
+    { .alias  = "GRCh37",
+      .about  = "Human Genome reference assembly GRCh37 / hg19, plain chromosome naming (1,2,3,..)",
+      .ploidy =
+          "X 1 60000 M 1\n"
+          "X 2699521 154931043 M 1\n"
+          "Y 1 59373566 M 1\n"
+          "Y 1 59373566 F 0\n"
+          "MT 1 16569 M 1\n"
+          "MT 1 16569 F 1\n"
+    },
+    { .alias  = "chrGRCh37",
+      .about  = "Human Genome reference assembly GRCh37 / hg19, chr-prefixed chromosome naming (chr1,chr2,chr3,..)",
+      .ploidy =
+          "chrX 1 60000 M 1\n"
+          "chrX 2699521 154931043 M 1\n"
+          "chrY 1 59373566 M 1\n"
+          "chrY 1 59373566 F 0\n"
+          "chrM 1 16569 M 1\n"
+          "chrM 1 16569 F 1\n"
+    },
+    { .alias  = "GRCh38",
+      .about  = "Human Genome reference assembly GRCh38 / hg38, plain chromosome naming (1,2,3,..)",
+      .ploidy =
+          "X 1 9999 M 1\n"
+          "X 2781480 155701381 M 1\n"
+          "Y 1 57227415 M 1\n"
+          "Y 1 57227415 F 0\n"
+          "MT 1 16569 M 1\n"
+          "MT 1 16569 F 1\n"
+    },
+    { .alias  = "chrGRCh38",
+      .about  = "Human Genome reference assembly GRCh38 / hg38, chr-prefixed chromosome naming (chr1,chr2,chr3,..)",
+      .ploidy =
+          "chrX 1 9999 M 1\n"
+          "chrX 2781480 155701381 M 1\n"
+          "chrY 1 57227415 M 1\n"
+          "chrY 1 57227415 F 0\n"
+          "chrMT 1 16569 M 1\n"
+          "chrMT 1 16569 F 1\n"
+    },
+    {
+        .alias  = NULL,
+        .about  = NULL,
+        .ploidy = NULL,
+    }
+};
+
 // only 5 columns are required and the first is ignored:
 //  ignored,sample,father(or 0),mother(or 0),sex(1=M,2=F)
 static char **parse_ped_samples(call_t *call, char **vals, int nvals, int *nsmpl)
@@ -465,6 +520,39 @@ static void set_ploidy(args_t *args, bcf1_t *rec)
     int *tmp = args->sex2ploidy; args->sex2ploidy = args->sex2ploidy_prev; args->sex2ploidy_prev = tmp;
 }
 
+ploidy_t *init_ploidy(char *alias)
+{
+    const ploidy_predef_t *pld = ploidy_predefs;
+
+    int detailed = 0, len = strlen(alias);
+    if ( alias[len-1]=='?' ) { detailed = 1; alias[len-1] = 0; }
+
+    while ( pld->alias && strcasecmp(alias,pld->alias) ) pld++;
+
+    if ( !pld->alias )
+    {
+        fprintf(stderr,"Predefined ploidies:\n");
+        pld = ploidy_predefs;
+        while ( pld->alias )
+        {
+            fprintf(stderr,"%s\n   .. %s\n\n", pld->alias,pld->about);
+            if ( detailed )
+                fprintf(stderr,"%s\n", pld->ploidy);
+            pld++;
+        }
+        fprintf(stderr,"Run as --ploidy <alias> (e.g. --ploidy GRCh37).\n");
+        fprintf(stderr,"To see the definition, append a question mark to the alias (e.g. --ploidy GRCh37?).\n");
+        fprintf(stderr,"\n");
+        exit(-1);
+    }
+    else if ( detailed )
+    {
+        fprintf(stderr,"%s", pld->ploidy);
+        exit(-1);
+    }
+    return ploidy_init_string(pld->ploidy,2);
+}
+
 static void usage(args_t *args)
 {
     fprintf(stderr, "\n");
@@ -478,7 +566,8 @@ static void usage(args_t *args)
     fprintf(stderr, "File format options:\n");
     fprintf(stderr, "   -o, --output <file>             write output to a file [standard output]\n");
     fprintf(stderr, "   -O, --output-type <b|u|z|v>     output type: 'b' compressed BCF; 'u' uncompressed BCF; 'z' compressed VCF; 'v' uncompressed VCF [v]\n");
-    fprintf(stderr, "       --ploidy <file>             space/tab-delimited list of CHROM,FROM,TO,SEX,PLOIDY\n");
+    fprintf(stderr, "       --ploidy <assembly>[?]      predefined ploidy, 'list' to print available settings\n");
+    fprintf(stderr, "       --ploidy-file <file>        space/tab-delimited list of CHROM,FROM,TO,SEX,PLOIDY\n");
     fprintf(stderr, "   -r, --regions <region>          restrict to comma-separated list of regions\n");
     fprintf(stderr, "   -R, --regions-file <file>       restrict to regions listed in a file\n");
     fprintf(stderr, "   -s, --samples <list>            list of samples to include [all samples]\n");
@@ -515,7 +604,7 @@ static void usage(args_t *args)
 
 int main_vcfcall(int argc, char *argv[])
 {
-    char *ploidy_fname = NULL;
+    char *ploidy_fname = NULL, *ploidy = NULL;
     args_t args;
     memset(&args, 0, sizeof(args_t));
     args.argc = argc; args.argv = argv;
@@ -558,15 +647,21 @@ int main_vcfcall(int argc, char *argv[])
         {"prior",1,0,'P'},
         {"novel-rate",1,0,'n'},
         {"ploidy",1,0,1},
+        {"ploidy-file",1,0,2},
+        {"chromosome-X",1,0,'X'},
+        {"chromosome-Y",1,0,'Y'},
         {0,0,0,0}
     };
 
     char *tmp = NULL;
-    while ((c = getopt_long(argc, argv, "h?o:O:r:R:s:S:t:T:ANMV:vcmp:C:n:P:f:ig", loptions, NULL)) >= 0)
+    while ((c = getopt_long(argc, argv, "h?o:O:r:R:s:S:t:T:ANMV:vcmp:C:n:P:f:igXY", loptions, NULL)) >= 0)
     {
         switch (c)
         {
-            case  1 : ploidy_fname = optarg; break;
+            case  2 : ploidy_fname = optarg; break;
+            case  1 : ploidy = optarg; break;
+            case 'X': error(stderr,"The -X option is deprecated, please use --ploidy instead\n"); break;
+            case 'Y': error(stderr,"The -Y option is deprecated, please use --ploidy instead\n"); break;
             case 'f': args.aux.output_tags |= parse_format_flag(optarg); break;
             case 'M': args.flag &= ~CF_ACGT_ONLY; break;     // keep sites where REF is N
             case 'N': args.flag |= CF_ACGT_ONLY; break;      // omit sites where first base in REF is N (the new default)
@@ -613,6 +708,10 @@ int main_vcfcall(int argc, char *argv[])
             default: usage(&args);
         }
     }
+    // Sanity check options and initialize
+    if ( ploidy_fname ) args.ploidy = ploidy_init(ploidy_fname, 2);
+    else if ( ploidy ) args.ploidy = init_ploidy(ploidy);
+
     if ( optind>=argc )
     {
         if ( !isatty(fileno((FILE *)stdin)) ) args.bcf_fname = "-";  // reading from stdin
@@ -620,17 +719,10 @@ int main_vcfcall(int argc, char *argv[])
     }
     else args.bcf_fname = argv[optind++];
 
-    // Sanity check options and initialize
-    if ( ploidy_fname ) args.ploidy = ploidy_init(ploidy_fname, 2);
-    else
+    if ( !ploidy_fname && !ploidy )
     {
-        args.ploidy = ploidy_init_string(
-                "X 1 60000 M 1\n"
-                "X 2699521 154931043 M 1\n"
-                "Y 1 59373566 M 1\n"
-                "Y 1 59373566 F 0\n"
-                "MT 1 16569 M 1\n"
-                "MT 1 16569 F 1\n", 2);
+        fprintf(stderr,"Note: Neither --ploidy nor --ploidy-file given, assuming all sites are diploid\n");
+        args.ploidy = ploidy_init_string("",2);
     }
     if ( !args.ploidy ) error("Could not initialize ploidy\n");
     if ( (args.flag & CF_CCALL ? 1 : 0) + (args.flag & CF_MCALL ? 1 : 0) + (args.flag & CF_QCALL ? 1 : 0) > 1 ) error("Only one of -c or -m options can be given\n");
