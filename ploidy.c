@@ -33,6 +33,7 @@ struct _ploidy_t
 {
     int nsex, msex;     // number of genders, m:number of allocated elements in id2sex array
     int dflt, min, max; // ploidy: default, min and max (only explicitly listed)
+    int *sex2dflt;
     regidx_t *idx;
     void *sex2id;
     char **id2sex;
@@ -85,6 +86,8 @@ int ploidy_parse(const char *line, char **chr_beg, char **chr_end, reg_t *reg, v
         hts_expand0(char*,ploidy->nsex,ploidy->msex,ploidy->id2sex);
         ploidy->id2sex[ploidy->nsex-1] = strdup(ploidy->tmp_str.s);
         sp->sex = khash_str2int_inc(ploidy->sex2id, ploidy->id2sex[ploidy->nsex-1]);
+        ploidy->sex2dflt = (int*) realloc(ploidy->sex2dflt,sizeof(int)*ploidy->nsex);
+        ploidy->sex2dflt[ploidy->nsex-1] = ploidy->dflt;
     }
 
     ss = se;
@@ -94,6 +97,15 @@ int ploidy_parse(const char *line, char **chr_beg, char **chr_end, reg_t *reg, v
     if ( ss==se ) error("Could not parse: %s\n", line);
     if ( sp->ploidy < ploidy->min ) ploidy->min = sp->ploidy;
     if ( sp->ploidy > ploidy->max ) ploidy->max = sp->ploidy;
+
+    // Special case, chr="*" stands for a default value
+    ss = (char*) line;
+    while ( *ss && isspace(*ss) ) ss++;
+    if ( ss[0]=='*' && (!ss[1] || isspace(ss[1])) ) 
+    {
+        ploidy->sex2dflt[ploidy->nsex-1] = sp->ploidy;
+        return -1;
+    }
 
     return 0;
 }
@@ -164,7 +176,7 @@ int ploidy_query(ploidy_t *ploidy, char *seq, int pos, int *sex2ploidy, int *min
         if ( min ) *min = ploidy->dflt;
         if ( max ) *max = ploidy->dflt;
         if ( sex2ploidy )
-            for (i=0; i<ploidy->nsex; i++) sex2ploidy[i] = ploidy->dflt;
+            for (i=0; i<ploidy->nsex; i++) sex2ploidy[i] = ploidy->sex2dflt[i];
         return 0;
     }
 

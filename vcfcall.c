@@ -126,7 +126,7 @@ ploidy_predef_t;
 static ploidy_predef_t ploidy_predefs[] =
 {
     { .alias  = "GRCh37",
-      .about  = "Human Genome reference assembly GRCh37 / hg19, plain chromosome naming (1,2,3,..)",
+      .about  = "Human Genome reference assembly GRCh37 / hg19",
       .ploidy =
           "X 1 60000 M 1\n"
           "X 2699521 154931043 M 1\n"
@@ -134,16 +134,14 @@ static ploidy_predef_t ploidy_predefs[] =
           "Y 1 59373566 F 0\n"
           "MT 1 16569 M 1\n"
           "MT 1 16569 F 1\n"
-    },
-    { .alias  = "chrGRCh37",
-      .about  = "Human Genome reference assembly GRCh37 / hg19, chr-prefixed chromosome naming (chr1,chr2,chr3,..)",
-      .ploidy =
           "chrX 1 60000 M 1\n"
           "chrX 2699521 154931043 M 1\n"
           "chrY 1 59373566 M 1\n"
           "chrY 1 59373566 F 0\n"
           "chrM 1 16569 M 1\n"
           "chrM 1 16569 F 1\n"
+          "*  * *     M 2\n"
+          "*  * *     F 2\n"
     },
     { .alias  = "GRCh38",
       .about  = "Human Genome reference assembly GRCh38 / hg38, plain chromosome naming (1,2,3,..)",
@@ -154,16 +152,26 @@ static ploidy_predef_t ploidy_predefs[] =
           "Y 1 57227415 F 0\n"
           "MT 1 16569 M 1\n"
           "MT 1 16569 F 1\n"
-    },
-    { .alias  = "chrGRCh38",
-      .about  = "Human Genome reference assembly GRCh38 / hg38, chr-prefixed chromosome naming (chr1,chr2,chr3,..)",
-      .ploidy =
           "chrX 1 9999 M 1\n"
           "chrX 2781480 155701381 M 1\n"
           "chrY 1 57227415 M 1\n"
           "chrY 1 57227415 F 0\n"
-          "chrMT 1 16569 M 1\n"
-          "chrMT 1 16569 F 1\n"
+          "chrM 1 16569 M 1\n"
+          "chrM 1 16569 F 1\n"
+          "*  * *     M 2\n"
+          "*  * *     F 2\n"
+    },
+    { .alias  = "X",
+      .about  = "Treat male samples as haploid and female as diploid regardless of the chromosome name",
+      .ploidy =
+          "*  * *     M 1\n"
+          "*  * *     F 2\n"
+    },
+    { .alias  = "Y",
+      .about  = "Treat male samples as haploid and female as no-copy, regardless of the chromosome name",
+      .ploidy =
+          "*  * *     M 1\n"
+          "*  * *     F 0\n"
     },
     {
         .alias  = NULL,
@@ -541,7 +549,7 @@ ploidy_t *init_ploidy(char *alias)
             pld++;
         }
         fprintf(stderr,"Run as --ploidy <alias> (e.g. --ploidy GRCh37).\n");
-        fprintf(stderr,"To see the definition, append a question mark to the alias (e.g. --ploidy GRCh37?).\n");
+        fprintf(stderr,"To see the detailed ploidy definition, append a question mark (e.g. --ploidy GRCh37?).\n");
         fprintf(stderr,"\n");
         exit(-1);
     }
@@ -566,7 +574,7 @@ static void usage(args_t *args)
     fprintf(stderr, "File format options:\n");
     fprintf(stderr, "   -o, --output <file>             write output to a file [standard output]\n");
     fprintf(stderr, "   -O, --output-type <b|u|z|v>     output type: 'b' compressed BCF; 'u' uncompressed BCF; 'z' compressed VCF; 'v' uncompressed VCF [v]\n");
-    fprintf(stderr, "       --ploidy <assembly>[?]      predefined ploidy, 'list' to print available settings\n");
+    fprintf(stderr, "       --ploidy <assembly>[?]      predefined ploidy, 'list' to print available settings, append '?' for details\n");
     fprintf(stderr, "       --ploidy-file <file>        space/tab-delimited list of CHROM,FROM,TO,SEX,PLOIDY\n");
     fprintf(stderr, "   -r, --regions <region>          restrict to comma-separated list of regions\n");
     fprintf(stderr, "   -R, --regions-file <file>       restrict to regions listed in a file\n");
@@ -660,8 +668,8 @@ int main_vcfcall(int argc, char *argv[])
         {
             case  2 : ploidy_fname = optarg; break;
             case  1 : ploidy = optarg; break;
-            case 'X': error(stderr,"The -X option is deprecated, please use --ploidy instead\n"); break;
-            case 'Y': error(stderr,"The -Y option is deprecated, please use --ploidy instead\n"); break;
+            case 'X': ploidy = "X"; fprintf(stderr,"Warning: -X will be deprecated, please use --ploidy instead.\n"); break;
+            case 'Y': ploidy = "Y"; fprintf(stderr,"Warning: -Y will be deprecated, please use --ploidy instead.\n"); break;
             case 'f': args.aux.output_tags |= parse_format_flag(optarg); break;
             case 'M': args.flag &= ~CF_ACGT_ONLY; break;     // keep sites where REF is N
             case 'N': args.flag |= CF_ACGT_ONLY; break;      // omit sites where first base in REF is N (the new default)
@@ -724,6 +732,7 @@ int main_vcfcall(int argc, char *argv[])
         fprintf(stderr,"Note: Neither --ploidy nor --ploidy-file given, assuming all sites are diploid\n");
         args.ploidy = ploidy_init_string("",2);
     }
+
     if ( !args.ploidy ) error("Could not initialize ploidy\n");
     if ( (args.flag & CF_CCALL ? 1 : 0) + (args.flag & CF_MCALL ? 1 : 0) + (args.flag & CF_QCALL ? 1 : 0) > 1 ) error("Only one of -c or -m options can be given\n");
     if ( !(args.flag & CF_CCALL) && !(args.flag & CF_MCALL) && !(args.flag & CF_QCALL) ) error("Expected -c or -m option\n");
