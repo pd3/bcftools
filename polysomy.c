@@ -591,12 +591,12 @@ static void usage(args_t *args)
     fprintf(stderr, "    -T, --targets-file <file>      similar to -R but streams rather than index-jumps\n");
     fprintf(stderr, "    -v, --verbose                  \n");
     fprintf(stderr, "Algorithm options:\n");
-    fprintf(stderr, "    -b, --bump-size <float>        minimum bump size (bigger more strict) [0.1]\n");
-    fprintf(stderr, "    -c, --cn-penalty <float>       penalty for increasing CN (smaller more strict) [0.3]\n");
-    fprintf(stderr, "    -f, --fit-th <float>           goodness of fit threshold (smaller more strict) [3.3]\n");
+    fprintf(stderr, "    -b, --bump-size <float>        minimum bump size (larger is stricter) [0.1]\n");
+    fprintf(stderr, "    -c, --cn-penalty <float>       penalty for increasing CN (smaller is stricter) [0.3]\n");
+    fprintf(stderr, "    -f, --fit-th <float>           goodness of fit threshold (smaller is stricter) [3.3]\n");
     fprintf(stderr, "    -i, --include-aa               include the AA peak also in CN2 and CN3 evaluation\n");
     fprintf(stderr, "    -m, --min-fraction <float>     minimum distinguishable fraction of aberrant cells [0.1]\n");
-    fprintf(stderr, "    -p, --peak-symmetry <float>    peak symmetry threshold (bigger more strict) [0.5]\n");
+    fprintf(stderr, "    -p, --peak-symmetry <float>    peak symmetry threshold (larger is stricter) [0.5]\n");
     fprintf(stderr, "\n");
     exit(1);
 }
