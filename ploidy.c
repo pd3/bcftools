@@ -160,6 +160,7 @@ void ploidy_destroy(ploidy_t *ploidy)
     if ( ploidy->idx ) regidx_destroy(ploidy->idx);
     free(ploidy->id2sex);
     free(ploidy->tmp_str.s);
+    free(ploidy->sex2dflt);
     free(ploidy);
 }
 
