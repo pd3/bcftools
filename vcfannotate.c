@@ -1245,7 +1245,7 @@ static void init_columns(args_t *args)
         }
         else if ( !strncasecmp("FORMAT/",str.s, 7) || !strncasecmp("FMT/",str.s,4) )
         {
-            if ( args->tgts_is_vcf )
+            if ( !args->tgts_is_vcf )
                 error("Error: FORMAT fields can be carried over from a VCF file only.\n");
 
             char *key = str.s + (!strncasecmp("FMT/",str.s,4) ? 4 : 7);
