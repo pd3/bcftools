@@ -465,7 +465,7 @@ static void usage(args_t *args)
     fprintf(stderr, "   -h, --help                  list plugin's options\n");
     fprintf(stderr, "   -l, --list-plugins          list available plugins. See BCFTOOLS_PLUGINS environment variable and man page for details\n");
     fprintf(stderr, "   -v, --verbose               print debugging information on plugin failure\n");
-    fprintf(stderr, "   -V, --vesion                print version string and exit\n");
+    fprintf(stderr, "   -V, --version               print version string and exit\n");
     fprintf(stderr, "\n");
     exit(1);
 }
