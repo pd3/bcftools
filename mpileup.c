@@ -469,6 +469,15 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=DP4,Number=4,Type=Integer,Description=\"Number of high-quality ref-fwd, ref-reverse, alt-fwd and alt-reverse bases\">");
     if ( conf->fmt_flag&B2B_FMT_SP )
         bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=SP,Number=1,Type=Integer,Description=\"Phred-scaled strand bias P-value\">");
+    if ( conf->fmt_flag&B2B_FMT_AD )
+        bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=AD,Number=R,Type=Integer,Description=\"Total allelic depths\">");
+    if ( conf->fmt_flag&B2B_FMT_ADF )
+        bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=ADF,Number=R,Type=Integer,Description=\"Total allelic depths on the forward strand\">");
+    if ( conf->fmt_flag&B2B_FMT_ADR )
+        bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=ADR,Number=R,Type=Integer,Description=\"Total allelic depths on the reverse strand\">");
+    bcf_hdr_append(bcf_hdr,"##INFO=<ID=AD,Number=R,Type=Integer,Description=\"Allelic depths\">");
+    bcf_hdr_append(bcf_hdr,"##INFO=<ID=ADF,Number=R,Type=Integer,Description=\"Allelic depths on the forward strand\">");
+    bcf_hdr_append(bcf_hdr,"##INFO=<ID=ADR,Number=R,Type=Integer,Description=\"Allelic depths on the reverse strand\">");
     if ( conf->gvcf )
         gvcf_update_header(conf->gvcf, bcf_hdr);
 
@@ -492,12 +501,16 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         assert( sizeof(float)==sizeof(int32_t) );
         bc.DP4 = (int32_t*) malloc(sm->n * sizeof(int32_t) * 4);
         bc.fmt_arr = (uint8_t*) malloc(sm->n * sizeof(float)); // all fmt_flag fields, float and int32
-        if ( conf->fmt_flag&(B2B_INFO_DPR|B2B_FMT_DPR) )
+        if ( conf->fmt_flag&(B2B_INFO_DPR|B2B_FMT_DPR|B2B_INFO_AD|B2B_INFO_ADF|B2B_INFO_ADR|B2B_FMT_AD|B2B_FMT_ADF|B2B_FMT_ADR) )
         {
             // first B2B_MAX_ALLELES fields for total numbers, the rest per-sample
-            bc.DPR = (int32_t*) malloc((sm->n+1)*B2B_MAX_ALLELES*sizeof(int32_t));
+            bc.ADR = (int32_t*) malloc((sm->n+1)*B2B_MAX_ALLELES*sizeof(int32_t));
+            bc.ADF = (int32_t*) malloc((sm->n+1)*B2B_MAX_ALLELES*sizeof(int32_t));
             for (i=0; i<sm->n; i++)
-                bcr[i].DPR = bc.DPR + (i+1)*B2B_MAX_ALLELES;
+            {
+                bcr[i].ADR = bc.ADR + (i+1)*B2B_MAX_ALLELES;
+                bcr[i].ADF = bc.ADF + (i+1)*B2B_MAX_ALLELES;
+            }
         }
     }
 
@@ -558,7 +571,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         bcf_call_destroy(bca);
         free(bc.PL);
         free(bc.DP4);
-        free(bc.DPR);
+        free(bc.ADR);
+        free(bc.ADF);
         free(bc.fmt_arr);
         free(bcr);
     }
@@ -652,6 +666,12 @@ int parse_format_flag(const char *str)
         else if ( !strcasecmp(tags[i],"DP4") ) flag |= B2B_FMT_DP4;
         else if ( !strcasecmp(tags[i],"DPR") ) flag |= B2B_FMT_DPR;
         else if ( !strcasecmp(tags[i],"INFO/DPR") ) flag |= B2B_INFO_DPR;
+        else if ( !strcasecmp(tags[i],"AD") ) flag |= B2B_FMT_AD;
+        else if ( !strcasecmp(tags[i],"ADF") ) flag |= B2B_FMT_ADF;
+        else if ( !strcasecmp(tags[i],"ADR") ) flag |= B2B_FMT_ADR;
+        else if ( !strcasecmp(tags[i],"INFO/AD") ) flag |= B2B_INFO_AD;
+        else if ( !strcasecmp(tags[i],"INFO/ADF") ) flag |= B2B_INFO_ADF;
+        else if ( !strcasecmp(tags[i],"INFO/ADR") ) flag |= B2B_INFO_ADR;
         else
         {
             fprintf(stderr,"Could not parse tag \"%s\" in \"%s\"\n", tags[i], str);
@@ -705,7 +725,8 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
             "      --gvcf INT[,...]    group non-variant sites into gVCF blocks according to minimum per-sample DP\n"
             "  -o, --output FILE       write output to FILE [standard output]\n"
             "  -O, --output-type TYPE  'b' compressed BCF; 'u' uncompressed BCF; 'z' compressed VCF; 'v' uncompressed VCF [v]\n"
-            "  -t, --output-tags LIST  optional tags to output: DP,DPR,DV,DP4,INFO/DPR,SP []\n"
+            "  -t, --output-tags LIST  optional tags to output:\n"
+            "               DP,DPR,DV,DP4,INFO/DPR,SP,AD,ADF,ADR,INFO/AD,INFO/ADF,INFO/ADR []\n"
             "\n"
             "SNP/INDEL genotype likelihoods options (effective with -g/-v):\n"
             "  -e, --ext-prob INT      Phred-scaled gap extension seq error probability [%d]\n", mplp->extQ);

@@ -174,7 +174,7 @@ polysomy.o: polysomy.c $(htslib_vcf_h) $(htslib_synced_bcf_reader_h) $(bcftools_
 peakfit.o: peakfit.c peakfit.h $(htslib_hts_h) $(HTSDIR)/htslib/kstring.h
 consensus.o: consensus.c $(htslib_hts_h) $(HTSDIR)/htslib/kseq.h rbuf.h $(bcftools_h) $(HTSDIR)/htslib/regidx.h
 version.o: version.h version.c
-mpileup.o: mpileup.c $(HTSDIR)/htslib/regidx.h
+mpileup.o: mpileup.c bam2bcf.h $(HTSDIR)/htslib/regidx.h
 
 test/test-rbuf.o: test/test-rbuf.c rbuf.h
 
