@@ -691,7 +691,7 @@ static void mcall_set_ref_genotypes(call_t *call, int nals)
     int ngts  = nals*(nals+1)/2;
     int nsmpl = bcf_hdr_nsamples(call->hdr);
 
-    for (i=0; i<4; i++) call->ac[i] = 0;
+    for (i=0; i<nals; i++) call->ac[i] = 0;
     call->nhets = 0;
     call->ndiploid = 0;
 
@@ -1445,7 +1445,7 @@ int mcall(call_t *call, bcf1_t *rec)
 
         // Skip the site if all samples are 0/0. This can happen occasionally.
         nAC = 0;
-        for (i=0; i<nout; i++) nAC += call->ac[i];
+        for (i=1; i<nout; i++) nAC += call->ac[i];
         if ( !nAC && call->flag & CALL_VARONLY && !call->keep_gvcf ) return 0;
         mcall_trim_PLs(call, rec, nals, nout, out_als);
     }
