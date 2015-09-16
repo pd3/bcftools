@@ -1,6 +1,6 @@
 /*  vcfconcat.c -- Concatenate or combine VCF/BCF files.
 
-    Copyright (C) 2013-2014 Genome Research Ltd.
+    Copyright (C) 2013-2015 Genome Research Ltd.
 
     Author: Petr Danecek <pd3@sanger.ac.uk>
 
@@ -73,7 +73,6 @@ static void init_data(args_t *args)
     {
         htsFile *fp = hts_open(args->fnames[i], "r"); if ( !fp ) error("Failed to open: %s\n", args->fnames[i]);
         bcf_hdr_t *hdr = bcf_hdr_read(fp); if ( !hdr ) error("Failed to parse header: %s\n", args->fnames[i]);
-
         args->out_hdr = bcf_hdr_merge(args->out_hdr,hdr);
         if ( bcf_hdr_nsamples(hdr) != bcf_hdr_nsamples(args->out_hdr) )
             error("Different number of samples in %s. Perhaps \"bcftools merge\" is what you are looking for?\n", args->fnames[i]);
