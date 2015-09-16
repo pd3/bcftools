@@ -1,15 +1,11 @@
-This is the official development repository for BCFtools. It contains all the vcf* commands
-which previously lived in the htslib repository (such as vcfcheck, vcfmerge, vcfisec, etc.)
-and the samtools BCF calling from bcftools subdirectory of samtools. 
+This branch contains experimental version of bcftools mpileup and gVCF calling.
 
-For a full documentation, see [bcftools GitHub page](http://samtools.github.io/bcftools/). 
+```
+git clone --branch=exp/gvcf --recursive git://github.com/pd3/bcftools.git
+cd bcftools; make 
 
-Other useful links:
-------------------
-
-File format specifications live on [HTS-spec GitHub page](http://samtools.github.io/hts-specs/)
-[htslib](https://github.com/samtools/htslib)
-[samtools](https://github.com/samtools/samtools)
-[tabix](https://github.com/samtools/tabix)
-
+cd bcftools
+git pull && git submodule update --recursive
+make clean && make 
+```
 
