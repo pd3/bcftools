@@ -29,7 +29,7 @@ TEST_PROG=  test/test-rbuf
 all: $(PROG) $(TEST_PROG)
 
 # Adjust $(HTSDIR) to point to your top-level htslib directory
-HTSDIR = ../htslib
+HTSDIR = htslib
 include $(HTSDIR)/htslib.mk
 HTSLIB = $(HTSDIR)/libhts.a
 BGZIP  = $(HTSDIR)/bgzip
@@ -106,13 +106,23 @@ test: $(PROG) plugins test/test-rbuf $(BGZIP) $(TABIX)
 test-plugins: $(PROG) plugins test/test-rbuf $(BGZIP) $(TABIX)
 	./test/test.pl --plugins --exec bgzip=$(BGZIP) --exec tabix=$(TABIX)
 
+## $(shell), :=, and ifeq/.../endif are GNU Make-specific.  If you don't have
+## GNU Make, comment out the parts of this conditional that don't apply.
+PLATFORM := $(shell uname -s)
+ifeq "$(PLATFORM)" "Darwin"
+SHLIB_FLAVOUR = dylib
+htslib_shared = $(HTSDIR)/libhts.dylib
+else
+SHLIB_FLAVOUR = so
+htslib_shared = $(HTSDIR)/libhts.so
+endif
 
 # Plugin rules
 PLUGINC = $(foreach dir, plugins, $(wildcard $(dir)/*.c))
 PLUGINS = $(PLUGINC:.c=.so)
 PLUGINM = $(PLUGINC:.c=.mk)
 
-%.so: %.c version.h version.c $(HTSDIR)/libhts.so
+%.so: %.c version.h version.c $(htslib_shared)
 	$(CC) -fPIC -shared $(CFLAGS) $(EXTRA_CPPFLAGS) $(CPPFLAGS) -L$(HTSDIR) $(LDFLAGS) -o $@ version.c $< -lhts $(LIBS)
 
 -include $(PLUGINM)
