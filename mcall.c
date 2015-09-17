@@ -1403,7 +1403,7 @@ int mcall(call_t *call, bcf1_t *rec)
         nout++;
     }
     int is_variant = out_als==1 ? 0 : 1;
-    if ( call->flag & CALL_VARONLY && !is_variant && !call->keep_gvcf ) return 0;
+    if ( call->flag & CALL_VARONLY && !is_variant ) return 0;
 
     // With -A, keep all ALTs except X
     if ( call->flag & CALL_KEEPALT )
@@ -1446,7 +1446,7 @@ int mcall(call_t *call, bcf1_t *rec)
         // Skip the site if all samples are 0/0. This can happen occasionally.
         nAC = 0;
         for (i=1; i<nout; i++) nAC += call->ac[i];
-        if ( !nAC && call->flag & CALL_VARONLY && !call->keep_gvcf ) return 0;
+        if ( !nAC && call->flag & CALL_VARONLY ) return 0;
         mcall_trim_PLs(call, rec, nals, nout, out_als);
     }
     if ( nals!=nout ) mcall_trim_numberR(call, rec, nals, nout, out_als);
