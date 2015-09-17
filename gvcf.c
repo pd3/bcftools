@@ -1,6 +1,6 @@
 /*  gvcf.c -- support for gVCF files.
 
-    Copyright (C) 2014 Genome Research Ltd.
+    Copyright (C) 2014-2015 Genome Research Ltd.
 
     Author: Petr Danecek <pd3@sanger.ac.uk>
 
@@ -30,9 +30,10 @@ struct _gvcf_t
     int *dp_range, ndp_range;   // per-sample DP ranges
     int prev_range;             // 0 if not in a block
     int32_t *dp, mdp, *pl, mpl, npl;
-    int32_t *tmp, mtmp;
+    int32_t *tmp, mtmp, *gts, ngts,mgts, nqsum,mqsum;
+    float *qsum;
     int32_t rid, start, end, min_dp;
-    char ref[6];                // reference base at start position
+    kstring_t als;
     bcf1_t *line;
 };
 
@@ -46,7 +47,6 @@ gvcf_t *gvcf_init(const char *dp_ranges)
 {
     gvcf_t *gvcf = (gvcf_t*) calloc(1,sizeof(gvcf_t));
     gvcf->line = bcf_init();
-    memcpy(gvcf->ref,"X,<*>",6);
 
     int n = 1;
     const char *ss = dp_ranges;
@@ -78,6 +78,9 @@ void gvcf_destroy(gvcf_t *gvcf)
     free(gvcf->dp);
     free(gvcf->pl);
     free(gvcf->tmp);
+    free(gvcf->qsum);
+    free(gvcf->gts);
+    free(gvcf->als.s);
     if ( gvcf->line ) bcf_destroy(gvcf->line);
     free(gvcf);
 }
@@ -105,9 +108,6 @@ bcf1_t *gvcf_write(gvcf_t *gvcf, htsFile *fh, bcf_hdr_t *hdr, bcf1_t *rec, int i
         ret = bcf_get_format_int32(hdr, rec, "DP", &gvcf->tmp, &gvcf->mtmp);
         if ( ret==nsmpl )
         {
-            if ( ret!=nsmpl )
-                error("Could not parse DP at %s:%d: wrong number of values\n", bcf_hdr_id2name(hdr,rec->rid), rec->pos+1);
-
             min_dp = gvcf->tmp[0];
             for (i=1; i<nsmpl; i++)
                 if ( min_dp > gvcf->tmp[i] ) min_dp = gvcf->tmp[i];
@@ -145,19 +145,23 @@ bcf1_t *gvcf_write(gvcf_t *gvcf, htsFile *fh, bcf_hdr_t *hdr, bcf1_t *rec, int i
         gvcf->line->rid  = gvcf->rid;
         gvcf->line->pos  = gvcf->start;
         gvcf->line->rlen = gvcf->end - gvcf->start;
-        bcf_update_alleles_str(hdr, gvcf->line, gvcf->ref);
+        bcf_update_alleles_str(hdr, gvcf->line, gvcf->als.s);
         if ( gvcf->start+1 < gvcf->end )    // create gVCF record only if it spans at least two sites
             bcf_update_info_int32(hdr, gvcf->line, "END", &gvcf->end, 1);
         bcf_update_info_int32(hdr, gvcf->line, "MinDP", &gvcf->min_dp, 1);
-        bcf_update_format_int32(hdr, gvcf->line, "PL", gvcf->pl, nsmpl*3);
+        if ( gvcf->nqsum>0 )
+            bcf_update_info_float(hdr, gvcf->line, "QS", gvcf->qsum, gvcf->nqsum);
+        if ( gvcf->ngts )
+            bcf_update_genotypes(hdr,gvcf->line,gvcf->gts,gvcf->ngts);
+        if ( gvcf->npl>0 )
+            bcf_update_format_int32(hdr, gvcf->line, "PL", gvcf->pl, gvcf->npl);
         bcf_update_format_int32(hdr, gvcf->line, "DP", gvcf->dp, nsmpl);
-        // dirty: filling directly, we know what QS looks like
-        float tmp[2]; tmp[0] = nsmpl; tmp[1] = 0;
-        bcf_update_info_float(hdr, gvcf->line, "QS", tmp, 2);
         bcf_write1(fh, hdr, gvcf->line);
         gvcf->prev_range = 0;
         gvcf->rid  = -1;
         gvcf->npl  = 0;
+        gvcf->nqsum = 0;
+        gvcf->ngts  = 0;
 
         if ( !rec ) return NULL;     // just flushing the buffer, this was last record
     }
@@ -168,12 +172,20 @@ bcf1_t *gvcf_write(gvcf_t *gvcf, htsFile *fh, bcf_hdr_t *hdr, bcf1_t *rec, int i
         {
             hts_expand(int32_t,nsmpl,gvcf->mdp,gvcf->dp);
             memcpy(gvcf->dp,gvcf->tmp,nsmpl*sizeof(int32_t));   // tmp still contains DP from rec
-            ret = bcf_get_format_int32(hdr, rec, "PL", &gvcf->pl, &gvcf->mpl);
-            if ( !ret ) error("PL field not present\n");
+            gvcf->npl = bcf_get_format_int32(hdr, rec, "PL", &gvcf->pl, &gvcf->mpl);
+
+            gvcf->nqsum = bcf_get_info_float(hdr,rec,"QS",&gvcf->qsum,&gvcf->mqsum);
+            gvcf->ngts  = bcf_get_genotypes(hdr,rec,&gvcf->gts,&gvcf->mgts);
 
             gvcf->rid    = rec->rid;
             gvcf->start  = rec->pos;
-            gvcf->ref[0] = rec->d.allele[0][0];
+            gvcf->als.l = 0;
+            kputs(rec->d.allele[0],&gvcf->als);
+            for (i=1; i<rec->n_allele; i++)
+            {
+                kputc(',',&gvcf->als);
+                kputs(rec->d.allele[i],&gvcf->als);
+            }
             gvcf->min_dp = min_dp;
         }
         else
@@ -182,20 +194,28 @@ bcf1_t *gvcf_write(gvcf_t *gvcf, htsFile *fh, bcf_hdr_t *hdr, bcf1_t *rec, int i
             for (i=0; i<nsmpl; i++)
                 if ( gvcf->dp[i] > gvcf->tmp[i] ) gvcf->dp[i] = gvcf->tmp[i];
             ret = bcf_get_format_int32(hdr, rec, "PL", &gvcf->tmp, &gvcf->mtmp);
-            if ( !ret || ret!=nsmpl*3 ) error("PL field not present or unexpected number of fields\n");
-            for (i=0; i<nsmpl; i++)
+            if ( ret>=0 )
             {
-                if ( gvcf->pl[3*i+1] > gvcf->tmp[3*i+1] )
+                if ( ret!=nsmpl*3 ) error("Unexpected number of PL fields\n");
+                for (i=0; i<nsmpl; i++)
                 {
-                    gvcf->pl[3*i+1] = gvcf->tmp[3*i+1];
-                    gvcf->pl[3*i+2] = gvcf->tmp[3*i+2];
+                    if ( gvcf->pl[3*i+1] > gvcf->tmp[3*i+1] )
+                    {
+                        gvcf->pl[3*i+1] = gvcf->tmp[3*i+1];
+                        gvcf->pl[3*i+2] = gvcf->tmp[3*i+2];
+                    }
+                    else if ( gvcf->pl[3*i+1]==gvcf->tmp[3*i+1] && gvcf->pl[3*i+2] > gvcf->tmp[3*i+2] )
+                        gvcf->pl[3*i+2] = gvcf->tmp[3*i+2];
                 }
-                else if ( gvcf->pl[3*i+1]==gvcf->tmp[3*i+1] && gvcf->pl[3*i+2] > gvcf->tmp[3*i+2] )
-                    gvcf->pl[3*i+2] = gvcf->tmp[3*i+2];
             }
+            else
+                gvcf->npl = 0;
         }
         gvcf->prev_range = dp_range;
-        gvcf->end = rec->pos;
+        if ( bcf_get_info_int32(hdr,rec,"END",&gvcf->tmp,&gvcf->mtmp)==1 )
+            gvcf->end = gvcf->tmp[0] - 1;   // from 1-based to 0-based
+        else
+            gvcf->end = rec->pos;
         return NULL;
     }
 
