@@ -1,0 +1,18 @@
+
+include::header.txt[]
+
+Installation
+------------
+
+You can check out the latest development source code with:
+
+----
+git clone git://github.com/samtools/htslib.git
+git clone git://github.com/samtools/bcftools.git
+git clone git://github.com/samtools/samtools.git
+cd bcftools; make
+cd ../samtools; make 
+----
+
+include::footer.txt[]
+

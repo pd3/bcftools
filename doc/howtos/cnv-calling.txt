@@ -1,0 +1,177 @@
+include::header.txt[]
+
+
+Copy Number Variation
+---------------------
+
+The BCFtools package implements two methods (the ``polysomy`` and ``cnv``
+commands) for sensitive detection of copy number alterations, aneuploidy and
+contamination.
+In contrast to other methods designed for identifying copy
+number variations in a single sample or in a sample composed of a mixture of
+normal and tumor cells, this method is tailored for determining differences
+between two cell lines, which allows to distinguish between normal and novel
+copy number variation. 
+Although the method was developed for use with genome-wide SNP genotyping data,
+it can be used also for high-coverage whole-genome or exome sequencing data.
+
+=== Installation
+
+For the ``polysomy`` command, the http://www.gnu.org/software/gsl/[GNU Scientific Library]
+must installed. The ``cnv`` command does not have external dependencies.
+As described in the link:howtos/install.html[installation], 
+the ``polysomy`` command must be compiled with ``USE_GPL=1``.
+If it is still not visible in the list of commands, recompile with:
+
+----
+make USE_GPL=1 clean all
+----
+
+Now typing ``bcftools polysomy`` should give you a list of available options.
+
+
+=== Preparing input data
+
+The ``polysomy`` command takes on input VCF with FORMAT columns annotated with
+B-Allele Frequency (the BAF annotation). The ``cnv`` command in addition requires the presence of
+Log R Ratio values (the LRR annotation). If the experimental data were prepared
+by Illumina's GenomeStudio, its text output can be converted to VCF using the 
+https://github.com/VertebrateResequencing/vr-codebase/blob/develop/scripts/fcr-to-vcf[fcr-to-vcf] script.
+
+----
+# First we need to create a mapping between SNP names and genomic coordinates
+# and convert alleles from Illumina's TOP/BOT strand convention to the reference
+# coordinates, forward strand.
+#
+# The file with SNP definitions looks like this:
+#
+$ head -2 HumanOmni.csv
+Index,Name,Chromosome,Position,GenTrain Score,SNP,ILMN Strand,Customer Strand,NormID
+1,200610-1,MT,2755,0.762200,[A/G],TOP,BOT,13
+2,200610-10,0,0,0.613600,[A/G],TOP,BOT,13
+
+# And the input data file looks like this:
+$ head -3 data.fcr
+SNP Name        Sample ID       Allele1 - Top   Allele2 - Top   Theta   R       X       Y       X Raw   Y Raw   B Allele Freq   Log R Ratio
+200610-1        A01_1   A       A       0.048   2.877   2.673   0.203   24228   878     0.0000  -0.2883
+200610-10       A01_1   A       A       0.052   3.525   3.260   0.265   29549   1140    0.0000  -0.1750
+
+# Let's create the mapping. This step needs to be done only once.
+$ (head -1 HumanOmni.csv; tail -n +2 HumanOmni.csv | sort -t, -k3,3d -k4,4n ) | gzip -c > sorted.cvs.gz
+$ zcat sorted.cvs.gz | ~/cvs/vr-codebase/scripts/fcr-to-vcf -M | bgzip -c > map.tab.gz
+
+# Now convert the data into VCF
+cat data.fcr | fcr-to-vcf -a map.tab.gz -o outdir/
+----
+
+=== Detecting aneuploidy and contamination
+
+Large aberrations which affect whole chromosomes, such as aneuploidy or
+contamination, can be discerned directly from the overall distribution of BAF
+values. The command is
+----
+bcftools polysomy -v -o outdir/ file.vcf 
+----
+and the results can be found in ``outdir/dist.dat``. The file can be inspected visually or
+processed by standard unix commands. For example, a list of chromosomes which are aberrant
+or uncertain can be obtained by
+----
+cat outdir/dist.dat | awk '$1=="CN" && $3!=0'
+----
+If uncertain, it is very useful to inspect the BAF distribution by eye. The distribution
+can be plotted using the auto-generated matplotlib script
+----
+python outdir/dist.py
+----
+
+The fitting may report a faillure printing -1 for the copy number state. This happens
+when the the ``-f`` threshold is too strict or when  the experimental data are
+too different from the expected distribution. In any case, seeing a large number of
+non-diploid states indicates either noisy input data or a contamination.
+
+====
+image::cnv-calling/bafdist.array.contam.png[]
+Example of the graphical output from the ``polysomy`` command. In this figure,
+the sample had three copies of chromosome X.  
+====
+
+
+=== Detecting subchromosomal CNVs
+The strength of the CNV caller is in the pairwise calling mode which detects
+differences between two samples. This greatly helps to reduce the number of
+false calls and also allows to distinguish between normal and novel copy number
+variation. The command is
+----
+bcftools cnv -c sampleA -s sampleB -o outdir/ -p 0 file.vcf 
+----
+The ``-p 0`` option tells the program to automatically call matplotlib and
+produce plots like the one in this example:
+
+====
+image::cnv-calling/cnv.array.cn231.png[]
+Example of the graphical output from the ``cnv`` command. In this figure,
+the control sample is normal and the query has two CNVs: duplication and loss.
+====
+
+
+=== Working with sequencing data 
+
+If the above fails or in case of whole genome or exome sequence data, the VCFs can be annotated
+"manually". We first call variants, estimate BAF values from the number of reference and
+non-reference bases, and annotate the VCF. In this example, we are going to perform
+pairwise CNV calling and we assume two samples in our BAM and VCF.
+
+----
+# Call variants. If using older versions, use samtools mpileup instead. The -t AD
+# option fills the FORMAT/AD annotation.
+$ bcftools mpileup -t AD -b file.bam -f ref.fa | bcftools call -mv -Ob -o calls.bcf
+
+# Extract allelic frequencies, keeping only SNP sites where both samples made a call
+# and where per-sample depth was at least dp=20.
+dp=20
+$ bcftools query calls.bcf -e'GT="." || TYPE="INDEL"' -f'%CHROM\t%POS[\t%AD{0}\t%AD{1}]\n' | \
+    awk '{if($3+$4>'$dp' && $5+$6>'$dp') \
+        printf "%s\t%s\t%.2f\t%.2f\n",$1,$2,1.0*$4/($3+$4),1.0*$6/($5+$6);}' | \
+    bgzip -c > baf.txt.gz
+
+# This is what the annotation file looks like
+$ zcat baf.txt.gz | head -2
+11  193096  0.24    0.16
+11  193194  0.61    0.81
+
+# Index the annotation file and fill in the BAF values. For the latter, we need to
+# add a BAF definition into the VCF header
+$ tabix -s1 -b2 -e2 baf.txt.gz
+$ echo '##FORMAT=<ID=BAF,Number=1,Type=Float,Description="NGS estimate of BAF">' > baf.hdr
+$ bcftools annotate -a baf.txt.gz -h baf.hdr -c CHROM,POS,FMT/BAF -Ob -o calls.baf.bcf calls.bcf
+----
+
+The B-Allele Frequency estimates from the exome data are much noisier, as shown
+in this example: 
+
+====
+image::cnv-calling/bafdist.exome.trisomy.png[]
+Example of BAF distribution obtained from exome data. Compare with the SNP array data
+distribution in the example above.  The exome data included only sites with
+more than 20x reads, only the RA (resp. RRA, RAA) peaks are shown.
+====
+
+While the ``polysomy`` command is unlikely to find a good fit of such data, the 
+``cnv`` command can still do its magic. Because we have no LRR estimates, the program
+must be told to ignore the LRR data by giving the ``-l 0`` option. Also the exome data is 
+mu more noisier, we set a higher BAF deviation via the ``-d`` option:
+----
+bcftools cnv -c Control -s Query -p 0 -o outdir/ -l0 -d 0.06,0.06
+----
+
+====
+image::cnv-calling/cnv.exome.cn232.png[]
+Example of CNV calling from exome data.
+====
+
+=== References
+Please cite our paper when using our software: (insert ref here)
+
+include::footer.txt[]
+
+
