@@ -159,7 +159,7 @@ more than 20x reads, only the RA (resp. RRA, RAA) peaks are shown.
 While the ``polysomy`` command is unlikely to find a good fit of such data, the 
 ``cnv`` command can still do its magic. Because we have no LRR estimates, the program
 must be told to ignore the LRR data by giving the ``-l 0`` option. Also the exome data is 
-mu more noisier, we set a higher BAF deviation via the ``-d`` option:
+much more noisier, we set a higher BAF deviation via the ``-d`` option:
 ----
 bcftools cnv -c Control -s Query -p 0 -o outdir/ -l0 -d 0.06,0.06
 ----
