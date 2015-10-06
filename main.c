@@ -139,7 +139,7 @@ static cmd_t cmds[] =
     },
     { .func  = main_vcfcnv,
       .alias = "cnv",
-      .help  = "-HMM CNV calling"    // do not advertise yet
+      .help  = "HMM CNV calling"
     },
     { .func  = main_vcffilter,
       .alias = "filter",
