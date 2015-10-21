@@ -90,7 +90,9 @@ too different from the expected distribution. In any case, seeing a large number
 non-diploid states indicates either noisy input data or a contamination.
 
 ====
-image::cnv-calling/bafdist.array.contam.png[]
+++++
+<a href="cnv-calling/bafdist.array.contam.png"><img src="cnv-calling/bafdist.array.contam.png" width="500px"></a>
+++++
 Example of the graphical output from the ``polysomy`` command. In this figure,
 the sample had three copies of chromosome X.  
 ====
@@ -108,7 +110,9 @@ The ``-p 0`` option tells the program to automatically call matplotlib and
 produce plots like the one in this example:
 
 ====
-image::cnv-calling/cnv.array.cn231.png[]
+++++
+<a href="cnv-calling/cnv.array.cn231.png"><img src="cnv-calling/cnv.array.cn231.png" width="600px"></a>
+++++
 Example of the graphical output from the ``cnv`` command. In this figure,
 the control sample is normal and the query has two CNVs: duplication and loss.
 ====
@@ -146,18 +150,21 @@ $ echo '##FORMAT=<ID=BAF,Number=1,Type=Float,Description="NGS estimate of BAF">'
 $ bcftools annotate -a baf.txt.gz -h baf.hdr -c CHROM,POS,FMT/BAF -Ob -o calls.baf.bcf calls.bcf
 ----
 
-The B-Allele Frequency estimates from the exome data are much noisier, as shown
+Don't expect miracles, the B-Allele Frequency estimates from the exome data are much noisier, as shown
 in this example: 
 
 ====
-image::cnv-calling/bafdist.exome.trisomy.png[]
+++++
+<a href="cnv-calling/bafdist.exome.trisomy.png"><img src="cnv-calling/bafdist.exome.trisomy.png" width="500px"></a>
+++++
 Example of BAF distribution obtained from exome data. Compare with the SNP array data
 distribution in the example above.  The exome data included only sites with
 more than 20x reads, only the RA (resp. RRA, RAA) peaks are shown.
 ====
 
-While the ``polysomy`` command is unlikely to find a good fit of such data, the 
-``cnv`` command can still do its magic. Because we have no LRR estimates, the program
+The ``polysomy`` command is unlikely to find a good fit of such data, but the
+``cnv`` command can occassionally make a good call if there is enough sites with good coverage.
+Because we have no LRR estimates, the program
 must be told to ignore the LRR data by giving the ``-l 0`` option. Also the exome data is 
 much more noisier, we set a higher BAF deviation via the ``-d`` option:
 ----
@@ -165,9 +172,12 @@ bcftools cnv -c Control -s Query -p 0 -o outdir/ -l0 -d 0.06,0.06
 ----
 
 ====
-image::cnv-calling/cnv.exome.cn232.png[]
+++++
+<a href="cnv-calling/cnv.exome.cn232.png"><img src="cnv-calling/cnv.exome.cn232.png" width="600px"></a>
+++++
 Example of CNV calling from exome data.
 ====
+
 
 === References
 Please cite our paper when using our software: (insert ref here)

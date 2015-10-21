@@ -9,7 +9,7 @@
 
 .Calling
 * link:cnv-calling.html[CNV calling]
-* link:consensus-calling.html[Consensus calling]
+* link:consensus-sequence.html[Consensus calling]
 * link:variant-calling.html[Variant calling]
 
 .Manipulating VCF/BCF

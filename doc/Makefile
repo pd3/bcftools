@@ -1,5 +1,6 @@
 TXT = \
     cnv-calling.txt \
+    consensus-sequence.txt \
     install.txt \
     index.txt \
 
