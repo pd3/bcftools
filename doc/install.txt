@@ -1,5 +1,5 @@
 
-include::header.txt[]
+include::header.inc[]
 
 Installation
 ------------
@@ -71,5 +71,5 @@ by copying ``bcftools/htslib/{bgzip,tabix}`` to the same bin directory
 to which you have installed bcftools et al.
 
 
-include::footer.txt[]
+include::footer.inc[]
 

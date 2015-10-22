@@ -1,4 +1,4 @@
-include::header.txt[]
+include::header.inc[]
 
 
 Consensus sequence
@@ -20,11 +20,11 @@ link:variant-calling.html[another page] which goes deeper and is devoted just
 to this, but in brief, the variant calling command in its simplest form is:
 
 ----
-bcftools mpileup -f reference.fa alignments.bam | bcftools call -mv -Oz -o calls.vcf.gz
+bcftools mpileup -Ou -f reference.fa alignments.bam | bcftools call -mv -Oz -o calls.vcf.gz
 tabix calls.vcf.gz
 ----
 
 
-include::footer.txt[]
+include::footer.inc[]
 
 

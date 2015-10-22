@@ -1,15 +1,10 @@
-TXT = \
-    cnv-calling.txt \
-    consensus-sequence.txt \
-    install.txt \
-    index.txt \
-
+TXT  = $(shell ls *.txt | grep -v bcftools.txt)
 HTML = $(TXT:.txt=.html)
 XML  = $(TXT:.txt=.xml)
 
 all: $(HTML)
 
-%.html: %.txt header.txt footer.txt
+%.html: %.txt header.inc footer.inc
 	asciidoctor -b html5 -a linkcss -a stylesheet=index.css -a no-header-footer $<
 
 clean:

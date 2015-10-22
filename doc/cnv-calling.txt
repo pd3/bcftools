@@ -1,4 +1,4 @@
-include::header.txt[]
+include::header.inc[]
 
 
 Copy Number Variation
@@ -182,6 +182,6 @@ Example of CNV calling from exome data.
 === References
 Please cite our paper when using our software: (insert ref here)
 
-include::footer.txt[]
+include::footer.inc[]
 
 

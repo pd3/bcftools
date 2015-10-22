@@ -16,13 +16,13 @@
 * link:filtering.html[Filtering]
 
 .Tips and Tricks
-* link:install.html[Number of samples]
+* link:query.html[Extracting information]
+* link:plugins.html[Plugins]
 
 ****
 
 // Disable last updated text.
 :last-update-label!:
-
 
 
 ++++

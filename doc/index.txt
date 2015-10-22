@@ -1,4 +1,4 @@
-include::header.txt[]
+include::header.inc[]
 
 BCFtools HowTo
 --------------
@@ -21,8 +21,9 @@ In order to avoid tedious repetion, throughout this document we will use
 Most commands accept VCF, bgzipped VCF and BCF with filetype detected
 automatically even when streaming from a pipe. Indexed VCF and BCF
 work in all situations. Unindexed VCF and BCF and streams
-work in most, but not all situations.
+work in most, but not all situations. In general, whenever multiple VCFs are
+read simultaneously, they must be indexed and therefore also compressed. 
 
 
-include::footer.txt[]
+include::footer.inc[]
 

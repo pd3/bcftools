@@ -1,0 +1,12 @@
+include::header.inc[]
+
+
+Plugins
+-------
+
+This can be about using plugins or about using the API, or both.
+
+
+include::footer.inc[]
+
+
