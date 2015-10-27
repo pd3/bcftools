@@ -12,11 +12,9 @@
 * link:consensus-sequence.html[Consensus calling]
 * link:variant-calling.html[Variant calling]
 
-.Manipulating VCF/BCF
-* link:filtering.html[Filtering]
-
 .Tips and Tricks
 * link:query.html[Extracting information]
+* link:filtering.html[Filtering]
 * link:plugins.html[Plugins]
 
 ****
