@@ -2115,7 +2115,7 @@ int can_merge(args_t *args)
 */
 void stage_line(args_t *args)
 {
-    int snp_mask = (VCF_SNP<<1)|(VCF_MNP<<1), indel_mask = VCF_INDEL<<1;
+    int snp_mask = (VCF_SNP<<1)|(VCF_MNP<<1), indel_mask = VCF_INDEL<<1, ref_mask = 1;
     bcf_srs_t *files = args->files;
     maux_t *maux = args->maux;
 
@@ -2149,7 +2149,7 @@ void stage_line(args_t *args)
             for (j=buf->beg; j<buf->end; j++)
             {
                 if ( buf->rec[j].skip ) continue;   // done or not compatible
-                if ( args->collapse&COLLAPSE_ANY ) break;
+                if ( args->collapse&COLLAPSE_ANY ) break;   // anything can be merged
                 int line_type = bcf_get_variant_types(buf->lines[j]);
                 if ( maux->var_types&snp_mask && line_type&VCF_SNP && (args->collapse&COLLAPSE_SNPS) ) break;
                 if ( maux->var_types&indel_mask && line_type&VCF_INDEL && (args->collapse&COLLAPSE_INDELS) ) break;
@@ -2157,8 +2157,9 @@ void stage_line(args_t *args)
                 {
                     if ( maux->var_types&snp_mask && (args->collapse&COLLAPSE_SNPS) ) break;
                     if ( maux->var_types&indel_mask && (args->collapse&COLLAPSE_INDELS) ) break;
+                    if ( maux->var_types&ref_mask ) break;
                 }
-                else if ( maux->var_types&(VCF_REF<<1) )
+                else if ( maux->var_types&ref_mask )
                 {
                     if ( line_type&snp_mask && (args->collapse&COLLAPSE_SNPS) ) break;
                     if ( line_type&indel_mask && (args->collapse&COLLAPSE_INDELS) ) break;
