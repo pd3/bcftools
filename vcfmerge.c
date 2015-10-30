@@ -1682,7 +1682,11 @@ void gvcf_set_alleles(args_t *args)
         else
         {
             maux->als = merge_alleles(line->d.allele, line->n_allele, maux->buf[i].rec[irec].map, maux->als, &maux->nals, &maux->mals);
-            if ( !maux->als ) error("Failed to merge alleles at %s:%d\n",bcf_seqname(args->out_hdr,line),line->pos+1);
+            if ( !maux->als )
+            {
+                bcf_hdr_t *hdr = bcf_sr_get_header(args->files,i);
+                error("Failed to merge alleles at %s:%d\n",bcf_seqname(hdr,line),line->pos+1);
+            }
         }
     }
 }
