@@ -94,7 +94,7 @@ int parse_tags(args_t *args, const char *str)
         else if ( !strcasecmp(tags[i],"AF") ) flag |= SET_AF;
         else
         {
-            fprintf(stderr,"Unknown tag \"%s\" in \"%s\"\n", tags[i], str);
+            fprintf(stderr,"Error parsing \"--tags %s\": the tag \"%s\" is not supported\n", str,tags[i]);
             exit(1);
         }
         free(tags[i]);
