@@ -12,15 +12,13 @@ number variations in a single sample or in a sample composed of a mixture of
 normal and tumor cells, this method is tailored for determining differences
 between two cell lines, which allows to distinguish between normal and novel
 copy number variation. 
-Although the method was developed for use with genome-wide SNP genotyping data,
-it can be used also for high-coverage whole-genome or exome sequencing data.
+
 
 === Installation
 
-For the ``polysomy`` command, the http://www.gnu.org/software/gsl/[GNU Scientific Library]
-must installed. The ``cnv`` command does not have external dependencies.
-As described in the link:howtos/install.html[installation], 
-the ``polysomy`` command must be compiled with ``USE_GPL=1``.
+The ``polysomy`` command requires the http://www.gnu.org/software/gsl/[GNU Scientific Library].
+As described in the link:install.html[installation], 
+it must be compiled with ``USE_GPL=1``.
 If it is still not visible in the list of commands, recompile with:
 
 ----
@@ -36,33 +34,10 @@ The ``polysomy`` command takes on input VCF with FORMAT columns annotated with
 B-Allele Frequency (the BAF annotation). The ``cnv`` command in addition requires the presence of
 Log R Ratio values (the LRR annotation). If the experimental data were prepared
 by Illumina's GenomeStudio, its text output can be converted to VCF using the 
-https://github.com/VertebrateResequencing/vr-codebase/blob/develop/scripts/fcr-to-vcf[fcr-to-vcf] script.
+link:cnv-calling/fcr-to-vcf[fcr-to-vcf] script.
+Please check this link:cnv-calling/usage-example.tgz[usage example] for details
+and some test data to experiment with.
 
-----
-# First we need to create a mapping between SNP names and genomic coordinates
-# and convert alleles from Illumina's TOP/BOT strand convention to the reference
-# coordinates, forward strand.
-#
-# The file with SNP definitions looks like this:
-#
-$ head -2 HumanOmni.csv
-Index,Name,Chromosome,Position,GenTrain Score,SNP,ILMN Strand,Customer Strand,NormID
-1,200610-1,MT,2755,0.762200,[A/G],TOP,BOT,13
-2,200610-10,0,0,0.613600,[A/G],TOP,BOT,13
-
-# And the input data file looks like this:
-$ head -3 data.fcr
-SNP Name        Sample ID       Allele1 - Top   Allele2 - Top   Theta   R       X       Y       X Raw   Y Raw   B Allele Freq   Log R Ratio
-200610-1        A01_1   A       A       0.048   2.877   2.673   0.203   24228   878     0.0000  -0.2883
-200610-10       A01_1   A       A       0.052   3.525   3.260   0.265   29549   1140    0.0000  -0.1750
-
-# Let's create the mapping. This step needs to be done only once.
-$ (head -1 HumanOmni.csv; tail -n +2 HumanOmni.csv | sort -t, -k3,3d -k4,4n ) | gzip -c > sorted.cvs.gz
-$ zcat sorted.cvs.gz | ~/cvs/vr-codebase/scripts/fcr-to-vcf -M | bgzip -c > map.tab.gz
-
-# Now convert the data into VCF
-cat data.fcr | fcr-to-vcf -a map.tab.gz -o outdir/
-----
 
 === Detecting aneuploidy and contamination
 
@@ -84,10 +59,10 @@ can be plotted using the auto-generated matplotlib script
 python outdir/dist.py
 ----
 
-The fitting may report a faillure printing -1 for the copy number state. This happens
-when the the ``-f`` threshold is too strict or when  the experimental data are
-too different from the expected distribution. In any case, seeing a large number of
-non-diploid states indicates either noisy input data or a contamination.
+When the goodness-of-fit threshold ``-f`` is set too strict or when the experimental
+intensities are too different from the expected distribution, the fit may fail.
+This is indicated by printing -1 instead of a copy number state.
+If the program outputs a non-diploid state on multiple chromosomes, this may indicate contamination or very noisy input data.
 
 ====
 ++++
@@ -99,12 +74,12 @@ the sample had three copies of chromosome X.
 
 
 === Detecting subchromosomal CNVs
-The strength of the CNV caller is in the pairwise calling mode which detects
+The strength of the CNV caller is in the pairwise calling mode which was designed to detect
 differences between two samples. This greatly helps to reduce the number of
-false calls and also allows to distinguish between normal and novel copy number
+false calls and also allows one to distinguish between normal and novel copy number
 variation. The command is
 ----
-bcftools cnv -c sampleA -s sampleB -o outdir/ -p 0 file.vcf 
+bcftools cnv -c conrol_sample -s query_sample -o outdir/ -p 0 file.vcf 
 ----
 The ``-p 0`` option tells the program to automatically call matplotlib and
 produce plots like the one in this example:
@@ -114,31 +89,19 @@ produce plots like the one in this example:
 <a href="cnv-calling/cnv.array.cn231.png"><img src="cnv-calling/cnv.array.cn231.png" width="600px"></a>
 ++++
 Example of the graphical output from the ``cnv`` command. In this figure,
-the control sample is normal and the query has two CNVs: duplication and loss.
+the control sample is normal and the query has two CNVs: a duplication and a loss.
 ====
 
 
-=== Working with sequencing data 
+=== Working with non-Illumina data 
 
-If the above fails or in case of whole genome or exome sequence data, the VCFs can be annotated
-"manually". We first call variants, estimate BAF values from the number of reference and
-non-reference bases, and annotate the VCF. In this example, we are going to perform
-pairwise CNV calling and we assume two samples in our BAM and VCF.
+If the link:cnv-calling/fcr-to-vcf[fcr-to-vcf] script fails from some reason or in case the input
+data is in a different format, the VCF file can be annotated
+"manually":
+
 
 ----
-# Call variants. If using older versions, use samtools mpileup instead. The -t AD
-# option fills the FORMAT/AD annotation.
-$ bcftools mpileup -t AD -b file.bam -f ref.fa | bcftools call -mv -Ob -o calls.bcf
-
-# Extract allelic frequencies, keeping only SNP sites where both samples made a call
-# and where per-sample depth was at least dp=20.
-dp=20
-$ bcftools query calls.bcf -e'GT="." || TYPE="INDEL"' -f'%CHROM\t%POS[\t%AD{0}\t%AD{1}]\n' | \
-    awk '{if($3+$4>'$dp' && $5+$6>'$dp') \
-        printf "%s\t%s\t%.2f\t%.2f\n",$1,$2,1.0*$4/($3+$4),1.0*$6/($5+$6);}' | \
-    bgzip -c > baf.txt.gz
-
-# This is what the annotation file looks like
+# Annotation file with BAF values for two samples
 $ zcat baf.txt.gz | head -2
 11  193096  0.24    0.16
 11  193194  0.61    0.81
@@ -147,36 +110,8 @@ $ zcat baf.txt.gz | head -2
 # add a BAF definition into the VCF header
 $ tabix -s1 -b2 -e2 baf.txt.gz
 $ echo '##FORMAT=<ID=BAF,Number=1,Type=Float,Description="NGS estimate of BAF">' > baf.hdr
-$ bcftools annotate -a baf.txt.gz -h baf.hdr -c CHROM,POS,FMT/BAF -Ob -o calls.baf.bcf calls.bcf
+$ bcftools annotate -a baf.txt.gz -h baf.hdr -c CHROM,POS,FMT/BAF -Ob -o output.bcf input.bcf
 ----
-
-Don't expect miracles, the B-Allele Frequency estimates from the exome data are much noisier, as shown
-in this example: 
-
-====
-++++
-<a href="cnv-calling/bafdist.exome.trisomy.png"><img src="cnv-calling/bafdist.exome.trisomy.png" width="500px"></a>
-++++
-Example of BAF distribution obtained from exome data. Compare with the SNP array data
-distribution in the example above.  The exome data included only sites with
-more than 20x reads, only the RA (resp. RRA, RAA) peaks are shown.
-====
-
-The ``polysomy`` command is unlikely to find a good fit of such data, but the
-``cnv`` command can occassionally make a good call if there is enough sites with good coverage.
-Because we have no LRR estimates, the program
-must be told to ignore the LRR data by giving the ``-l 0`` option. Also the exome data is 
-much more noisier, we set a higher BAF deviation via the ``-d`` option:
-----
-bcftools cnv -c Control -s Query -p 0 -o outdir/ -l0 -d 0.06,0.06
-----
-
-====
-++++
-<a href="cnv-calling/cnv.exome.cn232.png"><img src="cnv-calling/cnv.exome.cn232.png" width="600px"></a>
-++++
-Example of CNV calling from exome data.
-====
 
 
 === References
