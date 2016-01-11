@@ -1641,7 +1641,6 @@ static void normalize_vcf(args_t *args)
             if ( args->lines[ilast]->pos - args->lines[i]->pos < args->buf_win ) break;
             j++;
         }
-        if ( args->rbuf.n==args->rbuf.m ) j = 1;
         if ( j>0 ) flush_buffer(args, out, j);
     }
     flush_buffer(args, out, args->rbuf.n);
