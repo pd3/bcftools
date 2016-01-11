@@ -177,6 +177,7 @@ int main_vcfindex(int argc, char *argv[])
     if (stats) return vcf_index_stats(fname, stats);
 
     htsFile *fp = hts_open(fname,"r"); 
+    if ( !fp ) error("Failed to read %s\n", fname);
     htsFormat type = *hts_get_format(fp);
     hts_close(fp);
 
