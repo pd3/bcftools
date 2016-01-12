@@ -87,7 +87,7 @@ static int set_sample_pairs(char **samples, int nsamples, kstring_t *hdr, int id
             escaped = 0;
             ptr++;
         }
-        if ( !key.l ) break;
+        if ( !*ptr ) break;
         ptr++;
         while ( *ptr )
         {
