@@ -61,6 +61,23 @@ static inline void khash_str2str_destroy_free(void *_hash)
 }
 
 /*
+ *  Destroys the hash structure, the keys and the values
+ */
+static inline void khash_str2str_destroy_free_all(void *_hash)
+{
+    khash_t(str2str) *hash = (khash_t(str2str)*)_hash;
+    khint_t k;
+    if (hash == 0) return;
+    for (k = 0; k < kh_end(hash); ++k)
+        if (kh_exist(hash, k))
+        {
+            free((char*)kh_key(hash, k));
+            free((char*)kh_val(hash, k));
+        }
+    kh_destroy(str2str, hash);
+}
+
+/*
  *  Returns value if key exists or NULL if not
  */
 static inline char *khash_str2str_get(void *_hash, const char *str)
