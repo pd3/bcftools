@@ -1705,8 +1705,9 @@ Modify header of VCF/BCF files, change sample names.
     new sample names, one name per line, in the same order as they appear
     in the VCF file. Alternatively, only samples which need to be renamed
     can be listed as "old_name new_name\n" pairs separated by
-    whitespaces, each on separate line.
-
+    whitespaces, each on separate line. If the sample name contain spaces,
+    the spaces can be escaped using the backslash character, for example
+    "Not\ a\ good\ sample\ name".
 
 
 [[roh]]
