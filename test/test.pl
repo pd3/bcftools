@@ -137,6 +137,7 @@ test_vcf_view($opts,in=>'view.filter.annovar',out=>'view.filter.annovar.2.out',a
 test_vcf_view($opts,in=>'view.filter.annovar',out=>'view.filter.annovar.3.out',args=>q[-H -i 'LJB2_MutationTaster=="0.291000"'],reg=>'');
 test_mpileup($opts,out=>'mpileup.3.out',args=>q[-t DP,DV -r17:100-600]);
 test_mpileup($opts,out=>'mpileup.4.out',args=>q[-t DP,DV -r17:100-600 --gvcf 1,3]);
+test_mpileup($opts,out=>'mpileup.4.out',args=>q[-t DP,DV -r17:100-200,17:201-300,17:301-400,17:401-500,17:501-600 --gvcf 1,3]);
 test_gvcf_calling($opts,out=>'calling.1.out',mpileup=>q[--gvcf 1,5],call=>q[-mv]);
 test_vcf_call($opts,in=>'mpileup',out=>'mpileup.1.out',args=>'-mv');
 test_vcf_call_cAls($opts,in=>'mpileup',out=>'mpileup.cAls.out',tab=>'mpileup');
