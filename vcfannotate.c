@@ -1893,6 +1893,7 @@ int main_vcfannotate(int argc, char *argv[])
         annotate(args, line);
         bcf_write1(args->out_fh, args->hdr_out, line);
     }
+    if ( args->files->errnum ) error("Error: %s\n", bcf_sr_strerror(args->files->errnum));
     destroy_data(args);
     bcf_sr_destroy(args->files);
     free(args);
