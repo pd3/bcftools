@@ -330,6 +330,7 @@ static void gensample_to_vcf(args_t *args)
 
     int i, nsamples;
     char **samples = hts_readlist(sample_fname, 1, &nsamples);
+    if ( !samples ) error("Could not read %s\n", sample_fname);
     for (i=2; i<nsamples; i++)
     {
         se = samples[i]; while ( *se && !isspace(*se) ) se++;
@@ -446,6 +447,7 @@ static void haplegendsample_to_vcf(args_t *args)
 
     int i, nsamples;
     char **samples = hts_readlist(sample_fname, 1, &nsamples);
+    if ( !samples ) error("Could not read %s\n", sample_fname);
     for (i=0; i<nsamples; i++)
     {
         se = samples[i]; while ( *se && !isspace(*se) ) se++;
@@ -556,6 +558,7 @@ static void hapsample_to_vcf(args_t *args)
 
     int i, nsamples;
     char **samples = hts_readlist(sample_fname, 1, &nsamples);
+    if ( !samples ) error("Could not read %s\n", sample_fname);
     for (i=2; i<nsamples; i++)
     {
         se = samples[i]; while ( *se && !isspace(*se) ) se++;
@@ -628,6 +631,7 @@ static void vcf_to_gensample(args_t *args)
     kputs(args->outfname,&str);
     int n_files, i;
     char **files = hts_readlist(str.s, 0, &n_files);
+    if ( !files ) error("Error parsing --gensample filenames: %s\n", args->outfname);
     if ( n_files==1 )
     {
         int l = str.l;
@@ -641,10 +645,6 @@ static void vcf_to_gensample(args_t *args)
     {
         if (strlen(files[0]) && strcmp(files[0],".")!=0) gen_fname = strdup(files[0]);
         if (strlen(files[1]) && strcmp(files[1],".")!=0) sample_fname = strdup(files[1]);
-    }
-    else
-    {
-        error("Error parsing --gensample filenames: %s\n", args->outfname);
     }
     for (i=0; i<n_files; i++) free(files[i]);
     free(files);
@@ -737,8 +737,9 @@ static void vcf_to_haplegendsample(args_t *args)
     char *hap_fname = NULL, *legend_fname = NULL, *sample_fname = NULL;
     str.l = 0;
     kputs(args->outfname,&str);
-    int n_files, i;
+    int n_files = 0, i;
     char **files = hts_readlist(str.s, 0, &n_files);
+    if ( !files ) error("Error parsing --hapslegendsample filenames: %s\n", args->outfname);
     if ( n_files==1 )
     {
         int l = str.l;
@@ -756,10 +757,6 @@ static void vcf_to_haplegendsample(args_t *args)
         if (strlen(files[0]) && strcmp(files[0],".")!=0) hap_fname = strdup(files[0]);
         if (strlen(files[1]) && strcmp(files[1],".")!=0) legend_fname = strdup(files[1]);
         if (strlen(files[2]) && strcmp(files[2],".")!=0) sample_fname = strdup(files[2]);
-    }
-    else
-    {
-        error("Error parsing --hapslegendsample filenames: %s\n", args->outfname);
     }
     for (i=0; i<n_files; i++) free(files[i]);
     free(files);
@@ -884,8 +881,9 @@ static void vcf_to_hapsample(args_t *args)
     char *hap_fname = NULL, *sample_fname = NULL;
     str.l = 0;
     kputs(args->outfname,&str);
-    int n_files, i;
+    int n_files = 0, i;
     char **files = hts_readlist(str.s, 0, &n_files);
+    if ( !files ) error("Error parsing --hapsample filenames: %s\n", args->outfname);
     if ( n_files==1 )
     {
         int l = str.l;
@@ -899,10 +897,6 @@ static void vcf_to_hapsample(args_t *args)
     {
         if (strlen(files[0]) && strcmp(files[0],".")!=0) hap_fname = strdup(files[0]);
         if (strlen(files[1]) && strcmp(files[1],".")!=0) sample_fname = strdup(files[1]);
-    }
-    else
-    {
-        error("Error parsing --hapsample filenames: %s\n", args->outfname);
     }
     for (i=0; i<n_files; i++) free(files[i]);
     free(files);
