@@ -1184,55 +1184,73 @@ static void mcall_trim_PLs(call_t *call, bcf1_t *rec, int nals, int nout_als, in
 
 void mcall_trim_numberR(call_t *call, bcf1_t *rec, int nals, int nout_als, int out_als)
 {
-    int i, ret;
+    if ( nals==nout_als ) return;
 
-    // only DPR so far, we may generalize to arbitrary Number=R if necessary
-    ret = bcf_get_info_int32(call->hdr, rec, "DPR", &call->itmp, &call->n_itmp);
-    if ( ret>0 )
+    int i,j, nret, size = sizeof(float);
+
+    void *tmp_ori = call->itmp, *tmp_new = call->PLs;  // reusing PLs storage which is not used at this point
+    int ntmp_ori = call->n_itmp, ntmp_new = call->mPLs;
+
+    // INFO fields
+    for (i=0; i<rec->n_info; i++)
     {
-        assert( ret==nals );
-        if ( out_als==1 )
-            bcf_update_info_int32(call->hdr, rec, "DPR", call->itmp, 1);
+        bcf_info_t *info = &rec->d.info[i];
+        int vlen = bcf_hdr_id2length(call->hdr,BCF_HL_INFO,info->key);
+        if ( vlen!=BCF_VL_R ) continue; // not a Number=R tag
+
+        int type  = bcf_hdr_id2type(call->hdr,BCF_HL_INFO,info->key);
+        const char *key = bcf_hdr_int2id(call->hdr,BCF_DT_ID,info->key);
+        nret = bcf_get_info_values(call->hdr, rec, key, &tmp_ori, &ntmp_ori, type);
+
+        assert( nret==nals );
+
+        if ( nout_als==1 )
+            bcf_update_info_int32(call->hdr, rec, key, tmp_ori, 1);     // has to be the REF, the order could not change
         else
         {
-            for (i=0; i<nals; i++)
+            for (j=0; j<nals; j++)
             {
-                if ( call->als_map[i]==-1 ) continue;   // to be dropped
-                call->PLs[ call->als_map[i] ] = call->itmp[i]; // reusing PLs storage which is not used at this point
+                int k = call->als_map[j];
+                if ( k==-1 ) continue;   // to be dropped
+                memcpy(tmp_new+size*k, tmp_ori+size*j, size);
             }
-            bcf_update_info_int32(call->hdr, rec, "DPR", call->PLs, nout_als);
+            bcf_update_info_int32(call->hdr, rec, key, tmp_new, nout_als);
         }
     }
 
-    ret = bcf_get_format_int32(call->hdr, rec, "DPR", &call->itmp, &call->n_itmp);
-    if ( ret>0 )
+    // FORMAT fields
+    for (i=0; i<rec->n_fmt; i++)
     {
+        bcf_fmt_t *fmt = &rec->d.fmt[i];
+        int vlen = bcf_hdr_id2length(call->hdr,BCF_HL_FMT,fmt->id);
+        if ( vlen!=BCF_VL_R ) continue; // not a Number=R tag
+
+        int type = bcf_hdr_id2type(call->hdr,BCF_HL_FMT,fmt->id);
+        const char *key = bcf_hdr_int2id(call->hdr,BCF_DT_ID,fmt->id);
+        nret = bcf_get_format_values(call->hdr, rec, key, &tmp_ori, &ntmp_ori, type);
         int nsmpl = bcf_hdr_nsamples(call->hdr);
-        int ndp = ret / nsmpl;
-        assert( ndp==nals );
-        if ( out_als==1 )
-        {
-            for (i=0; i<nsmpl; i++)
-                call->PLs[i] = call->itmp[i*ndp];
 
-            bcf_update_format_int32(call->hdr, rec, "DPR", call->PLs, nsmpl);
-        }
-        else
+        assert( nret==nals*nsmpl );
+
+        for (j=0; j<nsmpl; j++)
         {
-            int j;
-            for (i=0; i<nsmpl; i++)
+            void *ptr_src = tmp_ori + j*nals*size;
+            void *ptr_dst = tmp_new + j*nout_als*size;
+            int k;
+            for (k=0; k<nals; k++)
             {
-                int32_t *dp_dst = call->PLs + i*nout_als;
-                int32_t *dp_src = call->itmp + i*ndp;
-                for (j=0; j<nals; j++)
-                {
-                    if ( call->als_map[j]==-1 ) continue;   // to be dropped
-                    dp_dst[ call->als_map[j] ] = dp_src[j]; // reusing PLs storage which is not used at this point
-                }
+                int l = call->als_map[k];
+                if ( l==-1 ) continue;   // to be dropped
+                memcpy(ptr_dst+size*l, ptr_src+size*k, size);
             }
-            bcf_update_format_int32(call->hdr, rec, "DPR", call->PLs, nsmpl*nout_als);
         }
+        bcf_update_format_int32(call->hdr, rec, key, tmp_new, nout_als*nsmpl);
     }
+
+    call->PLs    = (int32_t*) tmp_new;
+    call->mPLs   = ntmp_new;
+    call->itmp   = (int32_t*) tmp_ori;
+    call->n_itmp = ntmp_ori;
 }
 
 
