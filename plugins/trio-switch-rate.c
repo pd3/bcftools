@@ -198,14 +198,13 @@ bcf1_t *process(bcf1_t *rec)
         if ( child.a+child.b != 1 ) continue;       // child is not a het
 
         if ( !parse_genotype(&father, args.gt_arr + ngt*trio->father) ) continue;
-        if ( father.a+father.b == 1 ) continue;     // father is not a hom
-
         if ( !parse_genotype(&mother, args.gt_arr + ngt*trio->mother) ) continue;
-        if ( mother.a+mother.b == 1 ) continue;     // mother is not a hom
+        if ( father.a+father.b == 1 && mother.a+mother.b == 1 ) continue;     // both parents are hets
+        if ( father.a+father.b == mother.a+mother.b ) { trio->err++; continue; }    // mendelian error
 
-        if ( father.a==mother.a ) { trio->err++; continue; }    // mendelian error
-
-        int test_phase = 1 + (child.a==father.a);
+        int test_phase = 0; 
+        if ( father.a==father.b ) test_phase = 1 + (child.a==father.a);
+        else if ( mother.a==mother.b ) test_phase = 1 + (child.b==mother.a);
         if ( trio->prev > 0 )
         {
             if ( trio->prev!=test_phase ) trio->nswitch++;
