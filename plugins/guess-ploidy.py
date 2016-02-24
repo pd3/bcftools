@@ -60,22 +60,9 @@ col['blue']   = '#396ab1'
 col['orange'] = '#da7c30'
 col['green']  = '#3e9651'
 col['red']    = '#cc2529'
-#col['grey']   = '#535154'   # too light
-col['grey']   = '#3e3e3e'
+col['grey']   = '#000000'
 col['purple'] = '#6b4c9a'
-col['brown']  = '#922428'
-#col['yellow'] = '#948b3d'   # too dark
 col['yellow'] = '#ccc210'
-
-#col['blue']   = '#7293cb'      # light colors for bars
-#col['orange'] = '#e1974c'
-#col['green']  = '#84ba5b'
-#col['red']    = '#d35e60'
-#col['grey']   = '#808585'
-#col['purple'] = '#9067a7'
-#col['brown']  = '#ab6857'
-#col['yellow'] = '#ccc210'
-
 
 if True:
     fig,ax1 = plt.subplots(1,1,figsize=(6,4))
@@ -84,13 +71,13 @@ if True:
     dat['scoreM'] = select_sex(dat['score'],'M')
     dat['scoreF'] = select_sex(dat['score'],'F')
     ax2 = ax1.twinx()
-    plots  = ax1.plot([smpl2id[x[0]] for x in dat['phap']],[x[1] for x in dat['phap']],'.',color=col['blue'],ms=3,label='log P(haploid)')
+    plots  = ax2.plot([smpl2id[x[0]] for x in dat['ndat']],[x[1] for x in dat['ndat']],'v',color=col['grey'],ms=2,label='Number of sites')
+    plots += ax1.plot([smpl2id[x[0]] for x in dat['phap']],[x[1] for x in dat['phap']],'.',color=col['blue'],ms=3,label='log P(haploid)')
     plots += ax1.plot([smpl2id[x[0]] for x in dat['pdip']],[x[1] for x in dat['pdip']],'.',color=col['yellow'],ms=3,label='log P(diploid)')
     plots += ax1.plot([smpl2id[x[0]] for x in dat['scoreM']],[x[1] for x in dat['scoreM']],'.',color=col['green'],label='Total score: Males')
     plots += ax1.plot([smpl2id[x[0]] for x in dat['scoreF']],[x[1] for x in dat['scoreF']],'.',color=col['red'],label='Total score: Females')
-    plots += ax2.plot([smpl2id[x[0]] for x in dat['ndat']],[x[1] for x in dat['ndat']],'.',color=col['grey'],ms=3,label='Number of sites')
     labels = [l.get_label() for l in plots]
-    ax1.legend(plots,labels,loc='best', frameon=False, numpoints=1, prop={'size':10})
+    ax1.legend(plots,labels,loc='best', frameon=False, numpoints=1, prop={'size':9})
     ax1.set_zorder(ax2.get_zorder()+1)
     ax1.patch.set_visible(False)
     ax1.set_xlabel('Sample')
