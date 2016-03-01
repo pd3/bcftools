@@ -218,7 +218,7 @@ int run(int argc, char **argv)
     int region_is_file = 0;
     static struct option loptions[] =
     {
-        {"verbose",1,0,'v'},
+        {"verbose",0,0,'v'},
         {"err-prob",1,0,'e'},
         {"tag",1,0,'t'},
         {"regions",1,0,'r'},
