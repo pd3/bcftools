@@ -257,6 +257,7 @@ int run(int argc, char **argv)
         if ( !isatty(fileno((FILE *)stdin)) ) fname = "-";  // reading from stdin
         else { error(usage()); }
     }
+    else if ( optind+1!=argc ) error(usage());
     else fname = argv[optind];
 
     args->sr = bcf_sr_init();
