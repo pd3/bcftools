@@ -86,7 +86,7 @@ const char *usage(void)
         "   -r, --regions <chr:beg-end>     [X:2699521-154931043]\n"
         "   -R, --regions-file <file>       regions listed in a file\n"
         "   -t, --tag <tag>                 genotype or genotype likelihoods: GT, PL, GL [PL]\n"
-        "   -v, --verbose                   verbose output\n"
+        "   -v, --verbose                   verbose output (specify twice to increase verbosity)\n"
         "\n"
         "Examples:\n"
         "   bcftools +guess-ploidy in.vcf.gz\n"
@@ -204,6 +204,9 @@ void process_region_guess(args_t *args)
             counts->phap += log(phap);
             counts->pdip += log(pdip);
             counts->ncount++;
+            if ( args->verbose>1 )
+                printf("DBG\t%s\t%d\t%s\t%e\t%e\t%e\t%e\t%e\t%e\n", bcf_seqname(args->hdr,rec),rec->pos+1,bcf_hdr_int2id(args->hdr,BCF_DT_SAMPLE,ismpl),
+                    freq[1],tmp[0],tmp[1],tmp[2],phap,pdip);
         }
     }
 }
@@ -238,7 +241,7 @@ int run(int argc, char **argv)
                 break;
             case 'R': region_is_file = 1; break; 
             case 'r': region = optarg; break; 
-            case 'v': args->verbose = 1; break; 
+            case 'v': args->verbose++; break; 
             case 't':
                 if ( !strcasecmp(optarg,"GT") ) args->tag = GUESS_GT;
                 else if ( !strcasecmp(optarg,"PL") ) args->tag = GUESS_PL;
@@ -293,6 +296,8 @@ int run(int argc, char **argv)
             printf(" %s",args->argv[i]);
         printf("\n");
         printf("# [1]SEX\t[2]Sample\t[3]Predicted sex\t[4]log P(Haploid)/nSites\t[5]log P(Diploid)/nSites\t[6]nSites\t[7]Score: F < 0 < M ($4-$5)\n");
+        if ( args->verbose>1 )
+            printf("# [1]DBG\t[2]Chr\t[3]Pos\t[4]Sample\t[5]AF\t[6]pRR\t[7]pRA\t[8]pAA\t[9]P(Haploid)\t[10]P(Diploid)\n");
     }
 
     process_region_guess(args);
