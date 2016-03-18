@@ -28,7 +28,6 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <htslib/vcf.h>
-#include <htslib/regidx.h>
 #include <htslib/synced_bcf_reader.h>
 #include <htslib/vcfutils.h>
 #include <inttypes.h>
@@ -57,11 +56,14 @@ stats_t;
 typedef struct
 {
     int argc;
-    char **argv;
+    char **argv, *af_tag;
+    double af_dflt;
     stats_t stats;
-    int nsample, verbose, tag;
+    int nsample, verbose, tag, include_indels;
     int *counts, ncounts;       // number of observed GTs with given ploidy, used when -g is not given
     double *tmpf, *pl2p, gt_err_prob;
+    float *af;
+    int maf;
     int32_t *arr, narr;
     bcf_srs_t *sr;
     bcf_hdr_t *hdr;
@@ -77,12 +79,24 @@ const char *usage(void)
 {
     return 
         "\n"
-        "About: Determine sample sex by checking genotype likelihoods in non-PAR regions\n"
-        "       of sex chromosomes\n"
+        "About: Determine sample sex by checking genotype likelihoods (GL,PL) or genotypes (GT)\n"
+        "       in the non-PAR region of chrX. The HWE is assumed, so given the alternate allele\n" 
+        "       frequency fA and the genotype likelihoods pRR,pRA,pAA, the probabilities are\n"
+        "       calculated as\n"
+        "           P(dip) = pRR*(1-fA)^2 + pAA*fA^2 + 2*pRA*(1-fA)*fA\n"
+        "           P(hap) = pRR*(1-fA) + pAA*fA\n"
+        "       When genotype likelihoods are not available, the -e option is used to account\n"
+        "       for genotyping errors with -t GT. The alternate allele frequency fA is estimated\n"
+        "       directly from the data (the default) or can be provided by an INFO tag.\n"
+        "       The results can be visualized using the accompanied guess-ploidy.py script.\n"
+        "       Note that this plugin is intended to replace the former vcf2sex plugin.\n"
         "\n"
         "Usage: bcftools +guess-ploidy <file.vcf.gz> [Plugin Options]\n"
         "Plugin options:\n"
-        "   -e, --err-prob <float>          probability of GT being wrong (with -t GT) [1e-3]\n"
+        "       --AF-dflt <float>           the default alternate allele frequency [0.5]\n"
+        "       --AF-tag <TAG>              use TAG for allele frequency\n"
+        "   -e, --error-rate <float>        probability of GT being wrong (with -t GT) [1e-3]\n"
+        "   -i, --include-indels            do not skip indel sites\n"
         "   -r, --regions <chr:beg-end>     [X:2699521-154931043]\n"
         "   -R, --regions-file <file>       regions listed in a file\n"
         "   -t, --tag <tag>                 genotype or genotype likelihoods: GT, PL, GL [PL]\n"
@@ -101,7 +115,7 @@ void process_region_guess(args_t *args)
     while ( bcf_sr_next_line(args->sr) )
     {
         bcf1_t *rec = bcf_sr_get_line(args->sr,0);
-        if ( rec->n_allele==1 ) continue;   // skip ALT=. sites
+        if ( !args->include_indels && !(bcf_get_variant_types(rec)&VCF_SNP) )  continue;
 
         double freq[2] = {0,0}, sum;
         int ismpl,i;
@@ -190,7 +204,13 @@ void process_region_guess(args_t *args)
                 freq[1] += tmp[1]+2*tmp[2];
             }
         }
-        if ( !freq[0] && !freq[1] ) freq[0] = freq[1] = 0.5;
+        if ( args->af_tag )
+        {
+            int ret = bcf_get_info_float(args->hdr,rec,args->af_tag,&args->af, &args->maf);
+            if ( ret>0 ) { freq[0] = 1 - args->af[0]; freq[1] = args->af[0]; }
+        }
+
+        if ( !freq[0] && !freq[1] ) { freq[0] = 1 - args->af_dflt; freq[1] = args->af_dflt; }
         sum = freq[0] + freq[1];
         freq[0] /= sum;
         freq[1] /= sum;
@@ -217,12 +237,16 @@ int run(int argc, char **argv)
     args->tag    = GUESS_PL;
     args->argc   = argc; args->argv = argv;
     args->gt_err_prob = 1e-3;
-    char *region = "X:2699521-154931043";
+    args->af_dflt = 0.5;
+    char *region  = "X:2699521-154931043";
     int region_is_file = 0;
     static struct option loptions[] =
     {
+        {"AF-tag",1,0,0},
+        {"AF-dflt",1,0,1},
         {"verbose",0,0,'v'},
-        {"err-prob",1,0,'e'},
+        {"include-indels",0,0,'i'},
+        {"error-rate",1,0,'e'},
         {"tag",1,0,'t'},
         {"regions",1,0,'r'},
         {"regions-file",1,0,'R'},
@@ -230,10 +254,16 @@ int run(int argc, char **argv)
         {0,0,0,0}
     };
     char c, *tmp;
-    while ((c = getopt_long(argc, argv, "vr:R:t:e:",loptions,NULL)) >= 0)
+    while ((c = getopt_long(argc, argv, "vr:R:t:e:i",loptions,NULL)) >= 0)
     {
         switch (c) 
         {
+            case 0: args->af_tag = optarg; break;
+            case 1: 
+                    args->af_dflt = strtod(optarg,&tmp);
+                    if ( *tmp ) error("Could not parse: --AF-dflt %s\n", optarg);
+                    break;
+            case 'i': args->include_indels = 1; break;
             case 'e':
                 args->gt_err_prob = strtod(optarg,&tmp);
                 if ( *tmp ) error("Could not parse: -e %s\n", optarg);
@@ -278,6 +308,8 @@ int run(int argc, char **argv)
     args->nsample = bcf_hdr_nsamples(args->hdr);
     args->stats.counts = (count_t*) calloc(args->nsample,sizeof(count_t));
 
+    if ( args->af_tag && !bcf_hdr_idinfo_exists(args->hdr,BCF_HL_INFO,bcf_hdr_id2int(args->hdr,BCF_DT_ID,args->af_tag)) )
+        error("No such INFO tag: %s\n", args->af_tag);
 
     int i;
     if ( args->tag&GUESS_PL )
@@ -321,6 +353,7 @@ int run(int argc, char **argv)
     free(args->counts);
     free(args->stats.counts);
     free(args->arr);
+    free(args->af);
     free(args);
     return 0;
 }
