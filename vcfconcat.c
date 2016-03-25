@@ -32,13 +32,14 @@ THE SOFTWARE.  */
 #include <htslib/synced_bcf_reader.h>
 #include <htslib/kseq.h>
 #include <htslib/bgzf.h>
+#include <htslib/tbx.h> // for hts_get_bgzfp()
 #include "bcftools.h"
 
 typedef struct _args_t
 {
     bcf_srs_t *files;
     htsFile *out_fh;
-    int output_type;
+    int output_type, n_threads, record_cmd_line;
     bcf_hdr_t *out_hdr;
     int *seen_seq;
 
@@ -107,9 +108,10 @@ static void init_data(args_t *args)
         bcf_hdr_append(args->out_hdr,"##FORMAT=<ID=PQ,Number=1,Type=Integer,Description=\"Phasing Quality (bigger is better)\">");
         bcf_hdr_append(args->out_hdr,"##FORMAT=<ID=PS,Number=1,Type=Integer,Description=\"Phase Set\">");
     }
-    bcf_hdr_append_version(args->out_hdr, args->argc, args->argv, "bcftools_concat");
+    if (args->record_cmd_line) bcf_hdr_append_version(args->out_hdr, args->argc, args->argv, "bcftools_concat");
     args->out_fh = hts_open(args->output_fname,hts_bcf_wmode(args->output_type));
     if ( args->out_fh == NULL ) error("Can't write to \"%s\": %s\n", args->output_fname, strerror(errno));
+    if ( args->n_threads ) hts_set_threads(args->out_fh, args->n_threads);
 
     bcf_hdr_write(args->out_fh, args->out_hdr);
 
@@ -553,52 +555,102 @@ static void concat(args_t *args)
     }
 }
 
-BGZF *hts_get_bgzfp(htsFile *fp);
+int print_vcf_gz_header(BGZF *fp, BGZF *bgzf_out, int print_header, kstring_t *tmp)
+{
+    char *buffer = (char*) fp->uncompressed_block;
+
+    // Read the header and find the position of the data block
+    if ( buffer[0]!='#' ) error("Could not parse the header, expected '#', found '%c'\n", buffer[0]);
+
+    int nskip = 1;     // end of the header in the current uncompressed block
+    while (1)
+    {
+        if ( buffer[nskip]=='\n' )
+        {
+            nskip++;
+            if ( nskip>=fp->block_length )
+            {
+                kputsn(buffer,nskip,tmp);
+                if ( bgzf_read_block(fp) != 0 ) return -1;
+                if ( !fp->block_length ) break;
+                nskip = 0;
+            }
+            // The header has finished
+            if ( buffer[nskip]!='#' )
+            {
+                kputsn(buffer,nskip,tmp);
+                break;
+            }
+        }
+        nskip++;
+        if ( nskip>=fp->block_length )
+        {
+            kputsn(buffer,fp->block_length,tmp);
+            if ( bgzf_read_block(fp) != 0 ) return -1;
+            if ( !fp->block_length ) break;
+            nskip = 0;
+        }
+    }
+    if ( print_header )
+    {
+        if ( bgzf_write(bgzf_out,tmp->s,tmp->l) != tmp->l ) error("Failed to write %d bytes\n", tmp->l);
+        tmp->l = 0;
+    }
+    return nskip;
+}
+
 static void naive_concat(args_t *args)
 {
     // only compressed BCF atm
+    BGZF *bgzf_out = bgzf_open(args->output_fname,"w");;
 
-    BGZF *bgzf_out;
-    if ( strcmp("-",args->output_fname) )
-        bgzf_out = bgzf_open(args->output_fname,"w");
-    else
-        bgzf_out = bgzf_dopen(fileno(stdout), "w");
-
-    int page_size = getpagesize();
-    char *buf = (char*) valloc(page_size);
+    const size_t page_size = 32768;
+    char *buf = (char*) malloc(page_size);
     kstring_t tmp = {0,0,0};
-    int i;
+    int i, file_types = 0;
     for (i=0; i<args->nfnames; i++)
     {
         htsFile *hts_fp = hts_open(args->fnames[i],"r");
         if ( !hts_fp ) error("Failed to open: %s\n", args->fnames[i]);
         htsFormat type = *hts_get_format(hts_fp);
 
-        if ( type.format==vcf ) error("The --naive option currently works only for compressed BCFs, sorry :-/\n");
-        if ( type.compression!=bgzf ) error("The --naive option currently works only for compressed BCFs, sorry :-/\n");
+        if ( type.compression!=bgzf )
+            error("The --naive option works only for compressed BCFs or VCFs, sorry :-/\n");
+        file_types |= type.format==vcf ? 1 : 2;
+        if ( file_types==3 )
+            error("The --naive option works only for compressed files of the same type, all BCFs or all VCFs :-/\n");
 
         BGZF *fp = hts_get_bgzfp(hts_fp);
         if ( !fp || bgzf_read_block(fp) != 0 || !fp->block_length )
             error("Failed to read %s: %s\n", args->fnames[i], strerror(errno));
 
-        uint8_t magic[5];
-        if ( bgzf_read(fp, magic, 5)<0 ) error("Failed to read the BCF header in %s\n", args->fnames[i]);
-        if (strncmp((char*)magic, "BCF\2\2", 5) != 0) error("Invalid BCF magic string in %s\n", args->fnames[i]);
-
-        bgzf_read(fp, &tmp.l, 4);
-        hts_expand(char,tmp.l,tmp.m,tmp.s);
-        bgzf_read(fp, tmp.s, tmp.l);
-
-        // write only the first header
-        if ( i==0 )
+        int nskip;
+        if ( type.format==bcf )
         {
-            if ( bgzf_write(bgzf_out, "BCF\2\2", 5) !=5 ) error("Failed to write %d bytes to %s\n", 5,args->output_fname);
-            if ( bgzf_write(bgzf_out, &tmp.l, 4) !=4 ) error("Failed to write %d bytes to %s\n", 4,args->output_fname);
-            if ( bgzf_write(bgzf_out, tmp.s, tmp.l) != tmp.l) error("Failed to write %d bytes to %s\n", tmp.l,args->output_fname);
+            uint8_t magic[5];
+            if ( bgzf_read(fp, magic, 5) != 5 ) error("Failed to read the BCF header in %s\n", args->fnames[i]);
+            if (strncmp((char*)magic, "BCF\2\2", 5) != 0) error("Invalid BCF magic string in %s\n", args->fnames[i]);
+
+            if ( bgzf_read(fp, &tmp.l, 4) != 4 ) error("Failed to read the BCF header in %s\n", args->fnames[i]);
+            hts_expand(char,tmp.l,tmp.m,tmp.s);
+            if ( bgzf_read(fp, tmp.s, tmp.l) != tmp.l ) error("Failed to read the BCF header in %s\n", args->fnames[i]);
+
+            // write only the first header
+            if ( i==0 )
+            {
+                if ( bgzf_write(bgzf_out, "BCF\2\2", 5) !=5 ) error("Failed to write %d bytes to %s\n", 5,args->output_fname);
+                if ( bgzf_write(bgzf_out, &tmp.l, 4) !=4 ) error("Failed to write %d bytes to %s\n", 4,args->output_fname);
+                if ( bgzf_write(bgzf_out, tmp.s, tmp.l) != tmp.l) error("Failed to write %d bytes to %s\n", tmp.l,args->output_fname);
+            }
+            nskip = fp->block_offset;
+        }
+        else
+        {
+            nskip = print_vcf_gz_header(fp, bgzf_out, i==0?1:0, &tmp);
+            if ( nskip==-1 ) error("Error reading %s\n", args->fnames[i]);
         }
 
         // Output all non-header data that were read together with the header block
-        int nskip = fp->block_offset;
         if ( fp->block_length - nskip > 0 )
         {
             if ( bgzf_write(bgzf_out, fp->uncompressed_block+nskip, fp->block_length-nskip)<0 ) error("Error: %d\n",fp->errcode);
@@ -681,12 +733,14 @@ static void usage(args_t *args)
     fprintf(stderr, "   -D, --remove-duplicates        Alias for -d none\n");
     fprintf(stderr, "   -f, --file-list <file>         Read the list of files from a file.\n");
     fprintf(stderr, "   -l, --ligate                   Ligate phased VCFs by matching phase at overlapping haplotypes\n");
+    fprintf(stderr, "       --no-version               do not append version and command line to the header\n");
     fprintf(stderr, "   -n, --naive                    Concatenate BCF files without recompression (dangerous, use with caution)\n");
     fprintf(stderr, "   -o, --output <file>            Write output to a file [standard output]\n");
     fprintf(stderr, "   -O, --output-type <b|u|z|v>    b: compressed BCF, u: uncompressed BCF, z: compressed VCF, v: uncompressed VCF [v]\n");
     fprintf(stderr, "   -q, --min-PQ <int>             Break phase set if phasing quality is lower than <int> [30]\n");
     fprintf(stderr, "   -r, --regions <region>         Restrict to comma-separated list of regions\n");
     fprintf(stderr, "   -R, --regions-file <file>      Restrict to regions listed in a file\n");
+    fprintf(stderr, "       --threads <int>            Number of extra output compression threads [0]\n");
     fprintf(stderr, "\n");
     exit(1);
 }
@@ -698,23 +752,27 @@ int main_vcfconcat(int argc, char *argv[])
     args->argc    = argc; args->argv = argv;
     args->output_fname = "-";
     args->output_type = FT_VCF;
+    args->n_threads = 0;
+    args->record_cmd_line = 1;
     args->min_PQ  = 30;
 
     static struct option loptions[] =
     {
-        {"naive",0,0,'n'},
-        {"compact-PS",0,0,'c'},
-        {"regions",1,0,'r'},
-        {"regions-file",1,0,'R'},
-        {"remove-duplicates",0,0,'D'},
-        {"rm-dups",1,0,'d'},
-        {"allow-overlaps",0,0,'a'},
-        {"ligate",0,0,'l'},
-        {"output",1,0,'o'},
-        {"output-type",1,0,'O'},
-        {"file-list",1,0,'f'},
-        {"min-PQ",1,0,'q'},
-        {0,0,0,0}
+        {"naive",no_argument,NULL,'n'},
+        {"compact-PS",no_argument,NULL,'c'},
+        {"regions",required_argument,NULL,'r'},
+        {"regions-file",required_argument,NULL,'R'},
+        {"remove-duplicates",no_argument,NULL,'D'},
+        {"rm-dups",required_argument,NULL,'d'},
+        {"allow-overlaps",no_argument,NULL,'a'},
+        {"ligate",no_argument,NULL,'l'},
+        {"output",required_argument,NULL,'o'},
+        {"output-type",required_argument,NULL,'O'},
+        {"threads",required_argument,NULL,9},
+        {"file-list",required_argument,NULL,'f'},
+        {"min-PQ",required_argument,NULL,'q'},
+        {"no-version",no_argument,NULL,8},
+        {NULL,0,NULL,0}
     };
     char *tmp;
     while ((c = getopt_long(argc, argv, "h:?o:O:f:alq:Dd:r:R:cn",loptions,NULL)) >= 0)
@@ -743,6 +801,8 @@ int main_vcfconcat(int argc, char *argv[])
                     default: error("The output type \"%s\" not recognised\n", optarg);
                 };
                 break;
+            case  9 : args->n_threads = strtol(optarg, 0, 0); break;
+            case  8 : args->record_cmd_line = 0; break;
             case 'h':
             case '?': usage(args); break;
             default: error("Unknown argument: %s\n", optarg);
