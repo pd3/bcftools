@@ -136,6 +136,7 @@ typedef struct
     uint8_t *tmp_frm;
     int dp_min, dp_max, dp_step;
     gtcmp_t *af_gts_snps, *af_gts_indels, *smpl_gts_snps, *smpl_gts_indels; // first bin of af_* stats are singletons
+    float *af_bins;
 
     // indel context
     indel_ctx_t *indel_ctx;
@@ -148,7 +149,7 @@ typedef struct
     // other
     bcf_srs_t *files;
     bcf_sr_regions_t *exons;
-    char **argv, *exons_fname, *regions_list, *samples_list, *targets_list;
+    char **argv, *exons_fname, *regions_list, *samples_list, *targets_list, *af_bins_list;
     int argc, verbose_sites, first_allele_only, samples_is_file;
     int split_by_id, nstats;
 
@@ -406,10 +407,29 @@ static void init_stats(args_t *args)
     }
 
     // AF corresponds to AC but is more robust for mixture of haploid and diploid GTs
-    args->m_af = 101;
-    for (i=0; i<args->files->nreaders; i++)
-        if ( bcf_hdr_nsamples(args->files->readers[i].header) + 1> args->m_af )
-            args->m_af = bcf_hdr_nsamples(args->files->readers[i].header) + 1;
+    if ( !args->af_bins_list )
+    {
+        args->m_af = 101;
+        for (i=0; i<args->files->nreaders; i++)
+            if ( bcf_hdr_nsamples(args->files->readers[i].header) + 1> args->m_af )
+                args->m_af = bcf_hdr_nsamples(args->files->readers[i].header) + 1;
+    }
+    else
+    {
+        int is_file = index(args->af_bins_list,',') ? 0 : 1;    // a comma indicates a list, otherwise a file
+        int nlist;
+        char **list = hts_readlist(args->af_bins_list, is_file, &nlist);
+        args->m_af  = nlist + 1;    // first bin is for singletons
+        args->af_bins = (float*) malloc(sizeof(float)*args->m_af);
+        for (i=0; i<nlist; i++)
+        {
+            char *tmp;
+            args->af_bins[i] = strtod(list[i],&tmp);
+            if ( !tmp ) error("Could not parse %s: %s\n", args->af_bins_list, list[i]);
+            free(list[i]); 
+        }
+        free(list);
+    }
 
     #if QUAL_STATS
         args->m_qual = 999;
@@ -554,6 +574,7 @@ static void destroy_stats(args_t *args)
         if ( args->exons ) free(stats->smpl_frm_shifts);
     }
     for (j=0; j<args->nusr; j++) free(args->usr[j].tag);
+    free(args->af_bins);
     free(args->usr);
     free(args->tmp_frm);
     free(args->tmp_iaf);
@@ -568,6 +589,20 @@ static void destroy_stats(args_t *args)
     if (args->filter[0]) filter_destroy(args->filter[0]);
     if (args->filter[1]) filter_destroy(args->filter[1]);
 }
+
+inline int binary_search(float *dat, int ndat, float value)
+{   
+    int i = -1, imin = 0, imax = ndat - 1;
+    while ( imin<=imax )
+    {
+        i = (imin+imax)/2;
+        if ( value < dat[i] ) imax = i - 1;
+        else if ( value > dat[i] ) imin = i + 1;
+        else break;
+    }
+    if ( imin>imax || dat[i]!=value ) return imin;
+    return i;
+}   
 
 static void init_iaf(args_t *args, bcf_sr_t *reader)
 {
@@ -594,7 +629,12 @@ static void init_iaf(args_t *args, bcf_sr_t *reader)
             else if ( !an )
                 args->tmp_iaf[i] = 1;   // no genotype at all, put to the AF=0 bin
             else
-                args->tmp_iaf[i] = 1 + args->tmp_iaf[i] * (args->m_af-2.0) / an;
+            {
+                float af = (float) args->tmp_iaf[i] / an;
+                int iaf = args->af_bins ? binary_search(args->af_bins,args->m_af-1,af) : af*(args->m_af-2);
+    assert( iaf>=0 && iaf+1<args->m_af );
+                args->tmp_iaf[i] = iaf + 1;
+            }
         }
     }
     else
@@ -1209,7 +1249,8 @@ static void print_stats(args_t *args)
         for (i=1; i<args->m_af; i++) // note that af[1] now contains also af[0], see SiS stats output above
         {
             if ( stats->af_snps[i]+stats->af_ts[i]+stats->af_tv[i]+stats->af_repeats[0][i]+stats->af_repeats[1][i]+stats->af_repeats[2][i] == 0  ) continue;
-            printf("AF\t%d\t%f\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n", id,100.*(i-1)/(args->m_af-1),stats->af_snps[i],stats->af_ts[i],stats->af_tv[i],
+            float af = args->af_bins ? args->af_bins[i-1] : (i-1)/(args->m_af-1);
+            printf("AF\t%d\t%f\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n", id,100.*af,stats->af_snps[i],stats->af_ts[i],stats->af_tv[i],
                 stats->af_repeats[0][i]+stats->af_repeats[1][i]+stats->af_repeats[2][i],stats->af_repeats[0][i],stats->af_repeats[1][i],stats->af_repeats[2][i]);
         }
     }
@@ -1290,7 +1331,8 @@ static void print_stats(args_t *args)
                     nrd_mm[j] += stats[i].mm[j];
                 }
                 if ( !i || !n ) continue;   // skip singleton stats and empty bins
-                printf("GC%cAF\t2\t%f", x==0 ? 's' : 'i', 100.*(i-1)/(args->m_af-1));
+                float af = args->af_bins ? args->af_bins[i-1] : (i-1)/(args->m_af-1);
+                printf("GC%cAF\t2\t%f", x==0 ? 's' : 'i', 100.*af);
                 printf("\t%"PRId64"\t%"PRId64"\t%"PRId64"", stats[i].m[T2S(GT_HOM_RR)],stats[i].m[T2S(GT_HET_RA)],stats[i].m[T2S(GT_HOM_AA)]);
                 printf("\t%"PRId64"\t%"PRId64"\t%"PRId64"", stats[i].mm[T2S(GT_HOM_RR)],stats[i].mm[T2S(GT_HET_RA)],stats[i].mm[T2S(GT_HOM_AA)]);
                 printf("\t%f\t%"PRId32"\n", stats[i].r2n ? stats[i].r2sum/stats[i].r2n : -1.0, stats[i].r2n);
@@ -1423,8 +1465,10 @@ static void print_stats(args_t *args)
                 for (j=0; j<args->naf_hwe; j++) sum_tot += ptr[j];
                 if ( !sum_tot ) continue;
 
+                float af = args->af_bins ? args->af_bins[i-1] : (i-1)/(args->m_af-1);
+
                 int nprn = 3;
-                printf("HWE\t%d\t%f\t%d",id,100.*(i-1)/(args->m_af-1),sum_tot);
+                printf("HWE\t%d\t%f\t%d",id,100.*af,sum_tot);
                 for (j=0; j<args->naf_hwe; j++)
                 {
                     sum_tmp += ptr[j];
@@ -1462,6 +1506,7 @@ static void usage(void)
     fprintf(stderr, "Usage:   bcftools stats [options] <A.vcf.gz> [<B.vcf.gz>]\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "Options:\n");
+    fprintf(stderr, "        --af-bins <list>               allele frequency bins, file or a list of values, e.g 1e-3,0.01,0.1,0.5,1\n");
     fprintf(stderr, "    -1, --1st-allele-only              include only 1st allele at multiallelic sites\n");
     fprintf(stderr, "    -c, --collapse <string>            treat as identical records with <snps|indels|both|all|some|none>, see man page for details [none]\n");
     fprintf(stderr, "    -d, --depth <int,int,int>          depth distribution: min,max,bin size [0,500,1]\n");
@@ -1494,6 +1539,7 @@ int main_vcfstats(int argc, char *argv[])
 
     static struct option loptions[] =
     {
+        {"af-bins",1,0,1},
         {"1st-allele-only",0,0,'1'},
         {"include",1,0,'i'},
         {"exclude",1,0,'e'},
@@ -1516,6 +1562,7 @@ int main_vcfstats(int argc, char *argv[])
     };
     while ((c = getopt_long(argc, argv, "hc:r:R:e:s:S:d:i:t:T:F:f:1u:vIE:",loptions,NULL)) >= 0) {
         switch (c) {
+            case  1 : args->af_bins_list = optarg; break;
             case 'u': add_user_stats(args,optarg); break;
             case '1': args->first_allele_only = 1; break;
             case 'F': args->ref_fname = optarg; break;
