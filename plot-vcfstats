@@ -982,7 +982,7 @@ sub plot_DP
     if ( !@vals ) { return; }
 
     my $fh   = $$opts{plt_fh};
-    my $img  = "$$opts{dir}/depth.$id";
+    my $img  = "depth.$id";
 
     open(my $tfh,'>',"$img.dat") or error("$img.dat: $!");
     print $tfh "# [1]Depth\t[2]Cumulative number of genotypes\t[3]Number of genotypes\n";
