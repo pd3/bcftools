@@ -134,7 +134,7 @@ typedef struct
     vcmp_t *vcmp;
     maux_t *maux;
     regidx_t *regs;    // apply regions only after the blocks are expanded
-    int header_only, collapse, output_type, force_samples, merge_by_id, do_gvcf, filter_logic;
+    int header_only, collapse, output_type, force_samples, merge_by_id, do_gvcf, filter_logic, missing_to_ref;
     char *header_fname, *output_fname, *regions_list, *info_rules, *file_list;
     info_rule_t *rules;
     int nrules;
@@ -1294,6 +1294,7 @@ void merge_GT(args_t *args, bcf_fmt_t **fmt_map, bcf1_t *out)
     }
     memset(ma->smpl_ploidy,0,nsamples*sizeof(int));
 
+    int default_gt = args->missing_to_ref ? bcf_gt_unphased(0) : bcf_gt_missing;
     for (i=0; i<files->nreaders; i++)
     {
         bcf_sr_t *reader = &files->readers[i];
@@ -1308,7 +1309,7 @@ void merge_GT(args_t *args, bcf_fmt_t **fmt_map, bcf1_t *out)
             // missing values: assume maximum ploidy
             for (j=0; j<bcf_hdr_nsamples(hdr); j++)
             {
-                for (k=0; k<nsize; k++) { tmp[k] = 0; ma->smpl_ploidy[ismpl+j]++; }
+                for (k=0; k<nsize; k++) { tmp[k] = default_gt; ma->smpl_ploidy[ismpl+j]++; }
                 tmp += nsize;
             }
             ismpl += bcf_hdr_nsamples(hdr);
@@ -2301,6 +2302,7 @@ static void usage(void)
     fprintf(stderr, "        --force-samples                resolve duplicate sample names\n");
     fprintf(stderr, "        --print-header                 print only the merged header and exit\n");
     fprintf(stderr, "        --use-header <file>            use the provided header\n");
+    fprintf(stderr, "    -0  --missing-to-ref               assume genotypes at missing sites are 0/0\n");
     fprintf(stderr, "    -f, --apply-filters <list>         require at least one of the listed FILTER strings (e.g. \"PASS,.\")\n");
     fprintf(stderr, "    -F, --filter-logic <x|+>           remove filters if some input is PASS (\"x\"), or apply all filters (\"+\") [+]\n");
     fprintf(stderr, "    -g, --gvcf                         merge gVCF blocks, INFO/END tag is expected. Implies -i QS:sum,MinDP:min,I16:sum,IDV:max,IMF:max\n");
@@ -2332,6 +2334,7 @@ int main_vcfmerge(int argc, char *argv[])
         {"merge",1,0,'m'},
         {"gvcf",0,0,'g'},
         {"file-list",1,0,'l'},
+        {"missing-to-ref",0,0,'0'},
         {"apply-filters",1,0,'f'},
         {"use-header",1,0,1},
         {"print-header",0,0,2},
@@ -2344,13 +2347,14 @@ int main_vcfmerge(int argc, char *argv[])
         {"filter-logic",1,0,'F'},
         {0,0,0,0}
     };
-    while ((c = getopt_long(argc, argv, "hm:f:r:R:o:O:i:l:gF:",loptions,NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "hm:f:r:R:o:O:i:l:gF:0",loptions,NULL)) >= 0) {
         switch (c) {
             case 'F': 
                 if ( !strcmp(optarg,"+") ) args->filter_logic = FLT_LOGIC_ADD;
                 else if ( !strcmp(optarg,"x") ) args->filter_logic = FLT_LOGIC_REMOVE;
                 else error("Filter logic not recognised: %s\n", optarg);
                 break;
+            case '0': args->missing_to_ref = 1; break;
             case 'g': args->do_gvcf = 1; break;
             case 'l': args->file_list = optarg; break;
             case 'i': args->info_rules = optarg; break;
