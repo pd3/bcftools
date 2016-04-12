@@ -1067,12 +1067,13 @@ sub plot_hwe
             \\tax1.fill_between(x,y1,y3, facecolor='#ffeacc',edgecolor='#ffe0b2')
             \\tax1.set_ylabel('Fraction of hets',color='#ff9900')
             \\tax1.set_xlabel('Allele frequency')
-            \\tif af_xlog: ax1.set_xscale('log')
             \\tfor tl in ax1.get_yticklabels(): tl.set_color('#ff9900')
             \\tax2 = ax1.twinx()
             \\tplots += ax2.plot(x,dp, 'k', label='Number of sites')
             \\tax2.set_ylabel('Number of sites')
             \\tax2.set_yscale('log')
+            \\tif af_xlog: ax1.set_xscale('log')
+            \\tif af_xlog: ax2.set_xscale('log')
             \\tlabels = [l.get_label() for l in plots]
             \\tplt.legend(plots,labels,numpoints=1,markerscale=2,loc='center',prop={'size':9},frameon=False)
             \\tplt.subplots_adjust(left=0.15,bottom=0.15,right=0.86)
@@ -1254,7 +1255,7 @@ sub plot_concordance_by_AF
     my $img2 = "r2_by_af";
 
     open(my $tfh,'>',"$img.dat") or error("$img.dat: $!");
-    print $tfh "# [1]Allele Frequency\t[2]RR concordance\t[3]RA concordance\t[4]AA concordance\t[5]nRR\t[6]nRA\t[7]nAA\t[8]R^2\t[9]Number of sites\n";
+    print $tfh "# [1]Allele Frequency\t[2]RR concordance\t[3]RA concordance\t[4]AA concordance\t[5]nRR\t[6]nRA\t[7]nAA\t[8]R^2\t[9]Number of genotypes\n";
     for (my $i=0; $i<@$vals; $i++)
     {
         printf $tfh "%f\t%f\t%f\t%f\t%d\t%d\t%d\t%f\t%d\n",
@@ -1295,6 +1296,7 @@ sub plot_concordance_by_AF
             \\tax2.plot([row[0] for row in dat], [row[6] for row in dat],color='k')
             \\tax2.set_ylabel('Number of genotypes')
             \\tax2.set_yscale('log')
+            \\tif af_xlog: ax1.set_xscale('log')
             \\tif af_xlog: ax2.set_xscale('log')
             \\tplt.subplots_adjust(left=0.15,right=0.83,bottom=0.11)
             \\tplt.savefig('$img.png')
@@ -1310,9 +1312,10 @@ sub plot_concordance_by_AF
             \\tax2.plot([row[0] for row in dat], [row[8] for row in dat], '-o', color='r',mec='r',markersize=3)
             \\tax1.plot([row[0] for row in dat], [row[7] for row in dat], '-^', color='k',markersize=3)
             \\tfor tl in ax2.get_yticklabels(): tl.set_color('r')
-            \\tax2.set_ylabel('Number of sites', color='r')
+            \\tax2.set_ylabel('Number of genotypes', color='r')
             \\tax2.set_yscale('log')
             \\tif af_xlog: ax1.set_xscale('log')
+            \\tif af_xlog: ax2.set_xscale('log')
             \\tax1.set_ylabel('Aggregate allelic R\$^2\$', color='k')
             \\tax1.set_xlabel('Non-ref allele frequency')
             \\tplt.subplots_adjust(left=0.19,right=0.83,bottom=0.11)
