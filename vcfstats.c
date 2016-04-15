@@ -1236,16 +1236,22 @@ static void print_stats(args_t *args)
         stats->af_repeats[2][1] += stats->af_repeats[2][0];
     }
     // move the singletons stats into the first AF bin, singleton stats was collected separately because of init_iaf
-    args->af_gts_snps[1].y    += args->af_gts_snps[0].y;
-    args->af_gts_snps[1].yy   += args->af_gts_snps[0].yy;
-    args->af_gts_snps[1].xx   += args->af_gts_snps[0].xx;
-    args->af_gts_snps[1].yx   += args->af_gts_snps[0].yx;
-    args->af_gts_snps[1].n    += args->af_gts_snps[0].n;
-    args->af_gts_indels[1].y  += args->af_gts_indels[0].y;
-    args->af_gts_indels[1].yy += args->af_gts_indels[0].yy;
-    args->af_gts_indels[1].xx += args->af_gts_indels[0].xx;
-    args->af_gts_indels[1].yx += args->af_gts_indels[0].yx;
-    args->af_gts_indels[1].n  += args->af_gts_indels[0].n;
+    if ( args->af_gts_snps )
+    {
+        args->af_gts_snps[1].y    += args->af_gts_snps[0].y;
+        args->af_gts_snps[1].yy   += args->af_gts_snps[0].yy;
+        args->af_gts_snps[1].xx   += args->af_gts_snps[0].xx;
+        args->af_gts_snps[1].yx   += args->af_gts_snps[0].yx;
+        args->af_gts_snps[1].n    += args->af_gts_snps[0].n;
+    }
+    if ( args->af_gts_indels )
+    {
+        args->af_gts_indels[1].y  += args->af_gts_indels[0].y;
+        args->af_gts_indels[1].yy += args->af_gts_indels[0].yy;
+        args->af_gts_indels[1].xx += args->af_gts_indels[0].xx;
+        args->af_gts_indels[1].yx += args->af_gts_indels[0].yx;
+        args->af_gts_indels[1].n  += args->af_gts_indels[0].n;
+    }
 
     printf("# AF, Stats by non-reference allele frequency:\n# AF\t[2]id\t[3]allele frequency\t[4]number of SNPs\t[5]number of transitions\t[6]number of transversions\t[7]number of indels\t[8]repeat-consistent\t[9]repeat-inconsistent\t[10]not applicable\n");
     for (id=0; id<args->nstats; id++)
