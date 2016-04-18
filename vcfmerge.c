@@ -2062,13 +2062,13 @@ int can_merge(args_t *args)
                     {
                         if ( vcmp_find_allele(args->vcmp,maux->als+1,maux->nals-1,line->d.allele[k])>=0 ) break;
                     }
-                    if ( k==line->n_allele ) continue;  // no matching allele
+                    if ( !(line_type&ref_mask) && k==line->n_allele ) continue;  // not a REF-only site and there is no matching allele
                 }
                 if ( !(args->collapse&COLLAPSE_ANY) )
                 {
                     // Merge:
-                    //  - SNPs+SNPs+MNPs+REF if -w both,snps
-                    //  - indels+indels+REF  if -w both,indels, REF only if SNPs are not present
+                    //  - SNPs+SNPs+MNPs+REF if -m both,snps
+                    //  - indels+indels+REF  if -m both,indels, REF only if SNPs are not present
                     //  - SNPs come first
                     if ( line_type & indel_mask )
                     {
@@ -2120,6 +2120,8 @@ void stage_line(args_t *args)
     bcf_srs_t *files = args->files;
     maux_t *maux = args->maux;
 
+    // debug_maux(args);
+
     // take the most frequent allele present in multiple files, REF is skipped
     int i,j,k,icnt = 1;
     for (i=2; i<maux->nals; i++)
@@ -2137,6 +2139,8 @@ void stage_line(args_t *args)
         {
             if ( buf->rec[j].skip ) continue;   // done or not compatible
             if ( args->merge_by_id ) break;
+            if ( maux->nals==1 && buf->lines[j]->n_allele==1 ) break;   // REF-only record
+
             for (k=0; k<buf->lines[j]->n_allele; k++)
                 if ( icnt==buf->rec[j].map[k] ) break;
 
