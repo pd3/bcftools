@@ -1950,7 +1950,7 @@ void debug_maux(args_t *args)
     maux_t *maux = args->maux;
     int j,k,l;
 
-    fprintf(stderr,"Alleles to merge at %d\n", maux->pos+1);
+    fprintf(stderr,"Alleles to merge at %d, nals=%d\n", maux->pos+1,maux->nals);
     for (j=0; j<files->nreaders; j++)
     {
         bcf_sr_t *reader = &files->readers[j];
@@ -2056,7 +2056,7 @@ int can_merge(args_t *args)
                 {
                     // All alleles of the tested record must be present in the
                     // selected maux record plus variant types must be the same
-                    if ( (maux->var_types & line_type) != maux->var_types ) continue;
+                    if ( (maux->var_types & line_type) != line_type ) continue;
                     if ( vcmp_set_ref(args->vcmp,maux->als[0],line->d.allele[0]) < 0 ) continue;   // refs not compatible
                     for (k=1; k<line->n_allele; k++)
                     {
