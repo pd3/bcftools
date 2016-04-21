@@ -1201,8 +1201,7 @@ void mcall_trim_numberR(call_t *call, bcf1_t *rec, int nals, int nout_als, int o
         int type  = bcf_hdr_id2type(call->hdr,BCF_HL_INFO,info->key);
         const char *key = bcf_hdr_int2id(call->hdr,BCF_DT_ID,info->key);
         nret = bcf_get_info_values(call->hdr, rec, key, &tmp_ori, &ntmp_ori, type);
-
-        assert( nret==nals );
+        if ( nret<=0 ) continue;
 
         if ( nout_als==1 )
             bcf_update_info_int32(call->hdr, rec, key, tmp_ori, 1);     // has to be the REF, the order could not change
@@ -1421,6 +1420,8 @@ int mcall(call_t *call, bcf1_t *rec)
         if ( qsum_tot ) for (i=0; i<nals; i++) call->qsum[i] /= qsum_tot;
     #endif
 
+    bcf_update_info_int32(call->hdr, rec, "QS", NULL, 0);      // remove QS tag
+
     // Find the best combination of alleles
     int out_als, nout;
     if ( nals > 8*sizeof(out_als) )
@@ -1528,7 +1529,6 @@ int mcall(call_t *call, bcf1_t *rec)
     }
 
     bcf_update_info_int32(call->hdr, rec, "I16", NULL, 0);     // remove I16 tag
-    bcf_update_info_int32(call->hdr, rec, "QS", NULL, 0);      // remove QS tag
 
     return nout;
 }
