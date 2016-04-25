@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8" /><title>bcftools</title><link rel="stylesheet" type="text/css" href="docbook-xsl.css" /><meta name="generator" content="DocBook XSL Stylesheets V1.76.1" /></head><body><div xml:lang="en" class="refentry" title="bcftools" lang="en"><a id="idp146720"></a><div class="titlepage"></div><div class="refnamediv"><h2>Name</h2><p>bcftools — utilities for variant calling and manipulating VCFs and BCFs.</p></div><div class="refsynopsisdiv" title="Synopsis"><a id="_synopsis"></a><h2>Synopsis</h2><p><span class="strong"><strong>bcftools</strong></span> [--version|--version-only] [--help] [<span class="emphasis"><em>COMMAND</em></span>] [<span class="emphasis"><em>OPTIONS</em></span>]</p></div><div class="refsect1" title="DESCRIPTION"><a id="_description"></a><h2>DESCRIPTION</h2><p>BCFtools  is  a set of utilities that manipulate variant calls in the Variant
+<html xmlns="http://www.w3.org/1999/xhtml"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8" /><title>bcftools</title><link rel="stylesheet" type="text/css" href="docbook-xsl.css" /><meta name="generator" content="DocBook XSL Stylesheets V1.76.1" /></head><body><div xml:lang="en" class="refentry" title="bcftools" lang="en"><a id="idp25071520"></a><div class="titlepage"></div><div class="refnamediv"><h2>Name</h2><p>bcftools — utilities for variant calling and manipulating VCFs and BCFs.</p></div><div class="refsynopsisdiv" title="Synopsis"><a id="_synopsis"></a><h2>Synopsis</h2><p><span class="strong"><strong>bcftools</strong></span> [--version|--version-only] [--help] [<span class="emphasis"><em>COMMAND</em></span>] [<span class="emphasis"><em>OPTIONS</em></span>]</p></div><div class="refsect1" title="DESCRIPTION"><a id="_description"></a><h2>DESCRIPTION</h2><p>BCFtools  is  a set of utilities that manipulate variant calls in the Variant
 Call Format (VCF) and its binary counterpart BCF. All commands work
 transparently with both VCFs and BCFs, both uncompressed and BGZF-compressed.</p><p>Most commands accept VCF, bgzipped VCF and BCF with filetype detected
 automatically even when streaming from a pipe. Indexed VCF and BCF
 will work in all situations. Un-indexed VCF and BCF and streams will
-work in most, but not all situations.</p><p>BCFtools is designed to work on a stream. It regards an input file "-" as the
+work in most, but not all situations. In general, whenever multiple VCFs are
+read simultaneously, they must be indexed and therefore also compressed.</p><p>BCFtools is designed to work on a stream. It regards an input file "-" as the
 standard input (stdin) and outputs to the standard output (stdout). Several
-commands can thus be  combined  with  Unix pipes.</p><div class="refsect2" title="VERSION"><a id="_version"></a><h3>VERSION</h3><p>This manual page was last updated <span class="strong"><strong>2015-07-30 08:27 BST</strong></span> and refers to bcftools git version <span class="strong"><strong>1.2-184-g2cd4d8a+</strong></span>.</p></div><div class="refsect2" title="BCF1"><a id="_bcf1"></a><h3>BCF1</h3><p>The BCF1 format output by versions of samtools &lt;= 0.1.19 is <span class="strong"><strong>not</strong></span>
+commands can thus be  combined  with  Unix pipes.</p><div class="refsect2" title="VERSION"><a id="_version"></a><h3>VERSION</h3><p>This manual page was last updated <span class="strong"><strong>2016-04-25 08:43 BST</strong></span> and refers to bcftools git version <span class="strong"><strong>1.2-269-ga4ebb90+</strong></span>.</p></div><div class="refsect2" title="BCF1"><a id="_bcf1"></a><h3>BCF1</h3><p>The BCF1 format output by versions of samtools &lt;= 0.1.19 is <span class="strong"><strong>not</strong></span>
 compatible with this version of bcftools. To read BCF1 files one can use
 the view command from old versions of bcftools packaged with samtools
 versions &lt;= 0.1.19 to convert to VCF, which can then be read by
@@ -21,6 +22,8 @@ list of available options, run <span class="strong"><strong>bcftools</strong></s
 <span class="strong"><strong><a class="link" href="#annotate" title="bcftools annotate [OPTIONS] FILE">annotate</a></strong></span>   .. edit VCF files, add or remove annotations
 </li><li class="listitem">
 <span class="strong"><strong><a class="link" href="#call" title="bcftools call [OPTIONS] FILE">call</a></strong></span>        ..  SNP/indel calling (former "view")
+</li><li class="listitem">
+<span class="strong"><strong><a class="link" href="#cnv" title="bcftools cnv [OPTIONS] FILE">cnv</a></strong></span>          ..  Copy Number Variation caller
 </li><li class="listitem">
 <span class="strong"><strong><a class="link" href="#concat" title="bcftools concat [OPTIONS] FILE1 FILE2 […]">concat</a></strong></span>    ..  concatenate VCF/BCF files from the same set of samples
 </li><li class="listitem">
@@ -43,6 +46,8 @@ list of available options, run <span class="strong"><strong>bcftools</strong></s
 <span class="strong"><strong><a class="link" href="#norm" title="bcftools norm [OPTIONS] file.vcf.gz">norm</a></strong></span>        ..  normalize indels
 </li><li class="listitem">
 <span class="strong"><strong><a class="link" href="#plugin" title="bcftools plugin NAME [OPTIONS] FILE — [PLUGIN OPTIONS]">plugin</a></strong></span>    ..  run user-defined plugin
+</li><li class="listitem">
+<span class="strong"><strong><a class="link" href="#polysomy" title="bcftools polysomy [OPTIONS] file.vcf.gz">polysomy</a></strong></span>   ..  detect contaminations and whole-chromosome aberrations
 </li><li class="listitem">
 <span class="strong"><strong><a class="link" href="#query" title="bcftools query [OPTIONS] file.vcf.gz [file.vcf.gz […]]">query</a></strong></span>      ..  transform VCF/BCF into user-defined formats
 </li><li class="listitem">
@@ -402,6 +407,23 @@ demand. The original calling model can be invoked with the <span class="strong">
     GQ and GP fields are supported. For convenience, the fields can be given
     as lower case letters.
 </dd><dt><span class="term">
+<span class="strong"><strong>-F, --prior-freqs</strong></span> <span class="emphasis"><em>AN</em></span>,<span class="emphasis"><em>AC</em></span>
+</span></dt><dd>
+    take advantage of prior knowledge of population allele frequencies. The
+    workflow looks like this:
+</dd></dl></div><pre class="screen">    # Extract AN,AC values from an existing VCF, such 1000Genomes
+    bcftools query -f'%CHROM\t%POS\t%REF\t%ALT\t%AN\t%AC\n' 1000Genomes.bcf | bgzip -c &gt; AFs.tab.gz
+
+    # If the tags AN,AC are not already present, use the +fill-AN-AC plugin
+    bcftools +fill-AN-AC 1000Genomes.bcf | bcftools query -f'%CHROM\t%POS\t%REF\t%ALT\t%AN\t%AC\n' | bgzip -c &gt; AFs.tab.gz
+
+    # Create a VCF header description, here we name the tags REF_AN,REF_AC
+    cat &gt; AFs.hdr
+    ##INFO=&lt;ID=REF_AN,Number=1,Type=Integer,Description="Total number of alleles in reference genotypes"&gt;
+    ##INFO=&lt;ID=REF_AC,Number=A,Type=Integer,Description="Allele count in reference genotypes for each ALT allele"&gt;
+
+    # Now before calling, stream the raw mpileup output through `bcftools annotate` to add the frequencies
+    bcftools mpileup [...] -Ou | bcftools annotate -a AFs.tab.gz -h AFs.hdr -c CHROM,POS,REF,ALT,REF_AN,REF_AC -Ou | bcftools call -mv -F REF_AN,REF_AC [...]</pre><div class="variablelist"><dl><dt><span class="term">
 <span class="strong"><strong>-g, --gvcf</strong></span> <span class="emphasis"><em>INT</em></span>
 </span></dt><dd>
     output also gVCF blocks of homozygous REF calls. The parameter <span class="emphasis"><em>INT</em></span> is the
@@ -469,12 +491,105 @@ demand. The original calling model can be invoked with the <span class="strong">
 <span class="strong"><strong>-t, --targets</strong></span> <span class="emphasis"><em>file</em></span>|<span class="emphasis"><em>chr</em></span>|<span class="emphasis"><em>chr:pos</em></span>|<span class="emphasis"><em>chr:from-to</em></span>|<span class="emphasis"><em>chr:from-</em></span>[,…]
 </span></dt><dd>
     see <span class="strong"><strong><a class="link" href="#common_options" title="Common Options">Common Options</a></strong></span>
+</dd></dl></div></div></div><div class="refsect2" title="bcftools cnv [OPTIONS] FILE"><a id="cnv"></a><h3>bcftools cnv <span class="emphasis"><em>[OPTIONS]</em></span> <span class="emphasis"><em>FILE</em></span></h3><p>Copy number variation caller, requires a VCF annotated with the Illumina’s
+B-allele frequency (BAF) and Log R Ratio intensity (LRR) values. The HMM
+considers the following copy number states: CN 2 (normal), 1 (single-copy
+loss), 0 (complete loss), 3 (single-copy gain).</p><div class="refsect3" title="General Options:"><a id="_general_options"></a><h4>General Options:</h4><div class="variablelist"><dl><dt><span class="term">
+<span class="strong"><strong>-c, --control-sample</strong></span> <span class="emphasis"><em>string</em></span>
+</span></dt><dd>
+    optional control sample name. If given, pairwise calling is performed
+    and the <span class="strong"><strong>-P</strong></span>  option can be used
+</dd><dt><span class="term">
+<span class="strong"><strong>-f, --AF-file</strong></span> <span class="emphasis"><em>file</em></span>
+</span></dt><dd>
+    read allele frequencies from  a tab-delimited file with the columns CHR,POS,REF,ALT,AF
+</dd><dt><span class="term">
+*-o, --output-dir <span class="emphasis"><em>path</em></span>
+</span></dt><dd>
+    output directory
+</dd><dt><span class="term">
+*-p, --plot-threshold <span class="emphasis"><em>float</em></span>
+</span></dt><dd>
+    call <span class="strong"><strong>matplotlib</strong></span> to produce plots for chromosomes with quality at least <span class="emphasis"><em>float</em></span>,
+    useful for visual inspection of the calls. With <span class="strong"><strong>-p 0</strong></span>, plots for all chromosomes will be
+    generated. If not given, a <span class="strong"><strong>matplotlib</strong></span> script will be created but not called.
+</dd><dt><span class="term">
+<span class="strong"><strong>-r, --regions</strong></span> <span class="emphasis"><em>chr</em></span>|<span class="emphasis"><em>chr:pos</em></span>|<span class="emphasis"><em>chr:from-to</em></span>|<span class="emphasis"><em>chr:from-</em></span>[,…]
+</span></dt><dd>
+    see <span class="strong"><strong><a class="link" href="#common_options" title="Common Options">Common Options</a></strong></span>
+</dd><dt><span class="term">
+<span class="strong"><strong>-R, --regions-file</strong></span> <span class="emphasis"><em>file</em></span>
+</span></dt><dd>
+    see <span class="strong"><strong><a class="link" href="#common_options" title="Common Options">Common Options</a></strong></span>
+</dd><dt><span class="term">
+<span class="strong"><strong>-s, --query-sample</strong></span> <span class="emphasis"><em>string</em></span>
+</span></dt><dd>
+    query samply name
+</dd><dt><span class="term">
+<span class="strong"><strong>-t, --targets</strong></span> <span class="emphasis"><em>LIST</em></span>
+</span></dt><dd>
+    see <span class="strong"><strong><a class="link" href="#common_options" title="Common Options">Common Options</a></strong></span>
+</dd><dt><span class="term">
+<span class="strong"><strong>-T, --targets-file</strong></span> <span class="emphasis"><em>FILE</em></span>
+</span></dt><dd>
+    see <span class="strong"><strong><a class="link" href="#common_options" title="Common Options">Common Options</a></strong></span>
+</dd></dl></div></div><div class="refsect3" title="HMM Options:"><a id="_hmm_options"></a><h4>HMM Options:</h4><div class="variablelist"><dl><dt><span class="term">
+<span class="strong"><strong>-a, --aberrant</strong></span> <span class="emphasis"><em>float</em></span>[,<span class="emphasis"><em>float</em></span>]
+</span></dt><dd>
+    fraction of aberrant cells in query and control. The hallmark of
+    duplications and contaminations is the BAF value of heterozygous markers
+    which is dependent on the fraction of aberrant cells. Sensitivity to
+    smaller fractions of cells can be increased by setting <span class="strong"><strong>-a</strong></span> to a lower value. Note
+    however, that this comes at the cost of increased false discovery rate.
+</dd><dt><span class="term">
+<span class="strong"><strong>-b, --BAF-weight</strong></span> <span class="emphasis"><em>float</em></span>
+</span></dt><dd>
+    relative contribution from BAF
+</dd><dt><span class="term">
+<span class="strong"><strong>d, --BAF-dev</strong></span> <span class="emphasis"><em>float</em></span>[,<span class="emphasis"><em>float</em></span>]
+</span></dt><dd>
+    expected BAF deviation in query and control, i.e. the noise observed
+    in the data.
+</dd><dt><span class="term">
+<span class="strong"><strong>-e, --err-prob</strong></span> <span class="emphasis"><em>float</em></span>
+</span></dt><dd>
+    uniform error probability
+</dd><dt><span class="term">
+<span class="strong"><strong>-l, --LRR-weight</strong></span> <span class="emphasis"><em>float</em></span>
+</span></dt><dd>
+    relative contribution from LRR. With noisy data, this option can have big effect
+    on the number of calls produced. In truly random noise (such as in simulated data),
+    the value should be set high (1.0), but in the presence of systematic noise
+    when LRR are not informative, lower values result in cleaner calls (0.2).
+</dd><dt><span class="term">
+<span class="strong"><strong>-L, --LRR-smooth-win</strong></span> <span class="emphasis"><em>int</em></span>
+</span></dt><dd>
+    reduce LRR noise by applying moving average given this window size
+</dd><dt><span class="term">
+<span class="strong"><strong>-O, --optimize</strong></span> <span class="emphasis"><em>float</em></span>
+</span></dt><dd>
+    iteratively estimate the fraction of aberrant cells, down to the given fraction.
+    Lowering this value from the default 1.0 to say, 0.3, can help discover more
+    events but also increases noise
+</dd><dt><span class="term">
+<span class="strong"><strong>-P, --same-prob</strong></span> <span class="emphasis"><em>float</em></span>
+</span></dt><dd>
+    the prior probability of the query and the control sample being the same.
+    Setting to 0 calls both independently, setting to 1 forces the same copy
+    number state in both.
+</dd><dt><span class="term">
+<span class="strong"><strong>-x, --xy-prob</strong></span> <span class="emphasis"><em>float</em></span>
+</span></dt><dd>
+    the HMM probability of transition to another copy number state. Increasing this
+    values leads to smaller and more frequent calls.
 </dd></dl></div></div></div><div class="refsect2" title="bcftools concat [OPTIONS] FILE1 FILE2 […]"><a id="concat"></a><h3>bcftools concat <span class="emphasis"><em>[OPTIONS]</em></span> <span class="emphasis"><em>FILE1</em></span> <span class="emphasis"><em>FILE2</em></span> […]</h3><p>Concatenate or combine VCF/BCF files. All source files must have the same sample
 columns appearing in the same order. Can be used, for example, to
 concatenate chromosome VCFs into one VCF, or combine a SNP VCF and an indel
 VCF into one. The input files must be sorted by chr and position. The files
 must be given in the correct order to produce sorted VCF on output unless
-the <span class="strong"><strong>-a, --allow-overlaps</strong></span> option is specified.</p><div class="variablelist"><dl><dt><span class="term">
+the <span class="strong"><strong>-a, --allow-overlaps</strong></span> option is specified. With the --naive option, the files
+are concatenated without being recompressed, which is very fast but dangerous
+if the BCF headers differ.</p><div class="variablelist"><dl><dt><span class="term">
 <span class="strong"><strong>-a, --allow-overlaps</strong></span>
 </span></dt><dd>
     First coordinate of the next file can precede last record of the current file.
@@ -497,6 +612,14 @@ the <span class="strong"><strong>-a, --allow-overlaps</strong></span> option is 
 <span class="strong"><strong>-l, --ligate</strong></span>
 </span></dt><dd>
     Ligate phased VCFs by matching phase at overlapping haplotypes
+</dd><dt><span class="term">
+<span class="strong"><strong>-n, --naive</strong></span>
+</span></dt><dd>
+    Concatenate BCF files without recompression. This is very fast but requires
+    that all files have the same headers. This is because all tags and
+    chromosome names in the BCF body rely on the implicit order of the contig
+    and tag definitions in the header. Currently no sanity checks
+    are in place and only works for compressed BCF files. Dangerous, use with caution.
 </dd><dt><span class="term">
 <span class="strong"><strong>-o, --output</strong></span> <span class="emphasis"><em>FILE</em></span>
 </span></dt><dd>
@@ -1402,7 +1525,71 @@ int init(int argc, char **argv, bcf_hdr_t *in_hdr, bcf_hdr_t *out_hdr);
 bcf1_t *process(bcf1_t *rec);
 
 // Called after all lines have been processed to clean up
-void destroy(void);</pre></div></div><div class="refsect2" title="bcftools query [OPTIONS] file.vcf.gz [file.vcf.gz […]]"><a id="query"></a><h3>bcftools query [<span class="emphasis"><em>OPTIONS</em></span>] <span class="emphasis"><em>file.vcf.gz</em></span> [<span class="emphasis"><em>file.vcf.gz</em></span> […]]</h3><p>Extracts fields from VCF or BCF files and outputs them in user-defined format.</p><div class="variablelist"><dl><dt><span class="term">
+void destroy(void);</pre></div></div><div class="refsect2" title="bcftools polysomy [OPTIONS] file.vcf.gz"><a id="polysomy"></a><h3>bcftools polysomy [<span class="emphasis"><em>OPTIONS</em></span>] <span class="emphasis"><em>file.vcf.gz</em></span></h3><p>Detect number of chromosomal copies in VCFs annotates with the Illumina’s
+B-allele frequency (BAF) values. Note that this command is not compiled
+in by default, see the section <span class="strong"><strong>Optional Compilation with GSL</strong></span> in the INSTALL
+file for help.</p><div class="refsect3" title="General options:"><a id="_general_options_2"></a><h4>General options:</h4><div class="variablelist"><dl><dt><span class="term">
+<span class="strong"><strong>-o, --output-dir</strong></span> <span class="emphasis"><em>path</em></span>
+</span></dt><dd>
+    output directory
+</dd><dt><span class="term">
+<span class="strong"><strong>-r, --regions</strong></span> <span class="emphasis"><em>chr</em></span>|<span class="emphasis"><em>chr:pos</em></span>|<span class="emphasis"><em>chr:from-to</em></span>|<span class="emphasis"><em>chr:from-</em></span>[,…]
+</span></dt><dd>
+    see <span class="strong"><strong><a class="link" href="#common_options" title="Common Options">Common Options</a></strong></span>
+</dd><dt><span class="term">
+<span class="strong"><strong>-R, --regions-file</strong></span> <span class="emphasis"><em>file</em></span>
+</span></dt><dd>
+    see <span class="strong"><strong><a class="link" href="#common_options" title="Common Options">Common Options</a></strong></span>
+</dd><dt><span class="term">
+<span class="strong"><strong>-s, --sample</strong></span> <span class="emphasis"><em>string</em></span>
+</span></dt><dd>
+    samply name
+</dd><dt><span class="term">
+<span class="strong"><strong>-t, --targets</strong></span> <span class="emphasis"><em>LIST</em></span>
+</span></dt><dd>
+    see <span class="strong"><strong><a class="link" href="#common_options" title="Common Options">Common Options</a></strong></span>
+</dd><dt><span class="term">
+<span class="strong"><strong>-T, --targets-file</strong></span> <span class="emphasis"><em>FILE</em></span>
+</span></dt><dd>
+    see <span class="strong"><strong><a class="link" href="#common_options" title="Common Options">Common Options</a></strong></span>
+</dd><dt><span class="term">
+<span class="strong"><strong>-v, --verbose</strong></span>
+</span></dt><dd>
+    verbose debugging output which gives hints about the thresholds and decisions made
+    by the program. Note that the exact output can change between versions.
+</dd></dl></div></div><div class="refsect3" title="Algorithm options:"><a id="_algorithm_options"></a><h4>Algorithm options:</h4><div class="variablelist"><dl><dt><span class="term">
+<span class="strong"><strong>-b, --peak-size</strong></span> <span class="emphasis"><em>float</em></span>
+</span></dt><dd>
+    the minimum peak size considered as a good match can be from the interval [0,1]
+    where larger is stricter
+</dd><dt><span class="term">
+<span class="strong"><strong>-c, --cn-penalty</strong></span> <span class="emphasis"><em>float</em></span>
+</span></dt><dd>
+    a penalty for increasing copy number state. How this works: multiple peaks
+    are always a better fit than a single peak, therefore the program prefers
+    a single peak (normal copy number) unless the absolute deviation of the
+    multiple peaks fit is significantly smaller. Here the meaning of
+    "significant" is given by the <span class="emphasis"><em>float</em></span> from the interval [0,1] where
+    larger is stricter.
+</dd><dt><span class="term">
+<span class="strong"><strong>-f, --fit-th</strong></span> <span class="emphasis"><em>float</em></span>
+</span></dt><dd>
+    threshold for goodness of fit (normalized absolute deviation), smaller is stricter
+</dd><dt><span class="term">
+<span class="strong"><strong>-i, --include-aa</strong></span>
+</span></dt><dd>
+    include also the AA peak in CN2 and CN3 evaluation. This usually requires increasing <span class="strong"><strong>-f</strong></span>.
+</dd><dt><span class="term">
+<span class="strong"><strong>-m, --min-fraction</strong></span> <span class="emphasis"><em>float</em></span>
+</span></dt><dd>
+    minimum distinguishable fraction of aberrant cells. The experience shows that trustworthy
+    are estimates of 20% and more.
+</dd><dt><span class="term">
+<span class="strong"><strong>-p, --peak-symmetry</strong></span> <span class="emphasis"><em>float</em></span>
+</span></dt><dd>
+    a heuristics to filter failed fits where the expected peak symmetry is violated.
+    The <span class="emphasis"><em>float</em></span> is from the interval [0,1] and larger is stricter
+</dd></dl></div></div></div><div class="refsect2" title="bcftools query [OPTIONS] file.vcf.gz [file.vcf.gz […]]"><a id="query"></a><h3>bcftools query [<span class="emphasis"><em>OPTIONS</em></span>] <span class="emphasis"><em>file.vcf.gz</em></span> [<span class="emphasis"><em>file.vcf.gz</em></span> […]]</h3><p>Extracts fields from VCF or BCF files and outputs them in user-defined format.</p><div class="variablelist"><dl><dt><span class="term">
 <span class="strong"><strong>-c, --collapse</strong></span> <span class="emphasis"><em>snps</em></span>|<span class="emphasis"><em>indels</em></span>|<span class="emphasis"><em>both</em></span>|<span class="emphasis"><em>all</em></span>|<span class="emphasis"><em>some</em></span>|<span class="emphasis"><em>none</em></span>
 </span></dt><dd>
     see <span class="strong"><strong><a class="link" href="#common_options" title="Common Options">Common Options</a></strong></span>
@@ -1491,7 +1678,9 @@ bcftools query -f '%CHROM\t%POS\t%REF\t%ALT[\t%SAMPLE=%GT]\n' file.vcf.gz</pre><
     new sample names, one name per line, in the same order as they appear
     in the VCF file. Alternatively, only samples which need to be renamed
     can be listed as "old_name new_name\n" pairs separated by
-    whitespaces, each on separate line.
+    whitespaces, each on separate line. If the sample name contain spaces,
+    the spaces can be escaped using the backslash character, for example
+    "Not\ a\ good\ sample\ name".
 </dd></dl></div></div><div class="refsect2" title="bcftools roh [OPTIONS] file.vcf.gz"><a id="roh"></a><h3>bcftools roh [<span class="emphasis"><em>OPTIONS</em></span>] <span class="emphasis"><em>file.vcf.gz</em></span></h3><p>A program for detecting runs of homo/autozygosity. Only bi-allelic sites
 are considered.</p><div class="refsect3" title="The HMM model:"><a id="_the_hmm_model"></a><h4>The HMM model:</h4><pre class="screen">Notation:
   D  = Data, AZ = autozygosity, HW = Hardy-Weinberg (non-autozygosity),
@@ -1510,7 +1699,7 @@ Transition probabilities:
   HWi = P_i(HW)
 
   P_{i+1}(AZ) = oAZ * max[(1 - tAZ * ci) * AZ{i-1} , tAZ * ci * (1-AZ{i-1})]
-  P_{i+1}(HW) = oHW * max[(1 - tHW * ci) * (1-AZ{i-1}) , tHW * ci * AZ{i-1}]</pre></div><div class="refsect3" title="General Options:"><a id="_general_options"></a><h4>General Options:</h4><div class="variablelist"><dl><dt><span class="term">
+  P_{i+1}(HW) = oHW * max[(1 - tHW * ci) * (1-AZ{i-1}) , tHW * ci * AZ{i-1}]</pre></div><div class="refsect3" title="General Options:"><a id="_general_options_3"></a><h4>General Options:</h4><div class="variablelist"><dl><dt><span class="term">
 <span class="strong"><strong>--AF-dflt</strong></span> <span class="emphasis"><em>FLOAT</em></span>
 </span></dt><dd>
     in case allele frequency is not known, use the <span class="emphasis"><em>FLOAT</em></span>. By default, sites where
@@ -1572,7 +1761,7 @@ Transition probabilities:
 <span class="strong"><strong>-T, --targets-file</strong></span> <span class="emphasis"><em>file</em></span>
 </span></dt><dd>
     see <span class="strong"><strong><a class="link" href="#common_options" title="Common Options">Common Options</a></strong></span>
-</dd></dl></div></div><div class="refsect3" title="HMM Options:"><a id="_hmm_options"></a><h4>HMM Options:</h4><div class="variablelist"><dl><dt><span class="term">
+</dd></dl></div></div><div class="refsect3" title="HMM Options:"><a id="_hmm_options_2"></a><h4>HMM Options:</h4><div class="variablelist"><dl><dt><span class="term">
 <span class="strong"><strong>-a, --hw-to-az</strong></span> <span class="emphasis"><em>FLOAT</em></span>
 </span></dt><dd>
     P(AZ|HW) transition probability from AZ (autozygous) to HW (Hardy-Weinberg) state
@@ -1834,7 +2023,7 @@ logical operators
 INFO tags, FORMAT tags, column names
 </p><pre class="literallayout">INFO/DP or DP
 FORMAT/DV, FMT/DV, or DV
-FILTER, QUAL, ID, REF, ALT[0]</pre></li><li class="listitem"><p class="simpara">
+FILTER, QUAL, ID, POS, REF, ALT[0]</pre></li><li class="listitem"><p class="simpara">
 1 (or 0) to test the presence (or absence) of a flag
 </p><pre class="literallayout">FlagA=1 &amp;&amp; FlagB=0</pre></li><li class="listitem"><p class="simpara">
 "." to test missing values
@@ -1864,7 +2053,7 @@ true for the string vector INFO/STR=AB,CD.
 Variables and function names are case-insensitive, but not tag names. For example,
 "qual" can be used instead of "QUAL", "strlen()" instead of "STRLEN()" , but
 not "dp" instead of "DP".
-</li></ul></div><p><span class="strong"><strong>Examples:</strong></span></p><pre class="literallayout">MIN(DV)&gt;5</pre><pre class="literallayout">MIN(DV/DP)&gt;0.3</pre><pre class="literallayout">MIN(DP)&gt;10 &amp; MIN(DV)&gt;3</pre><pre class="literallayout">QUAL&gt;10 |  FMT/GQ&gt;10   .. selects only GQ&gt;10 samples</pre><pre class="literallayout">QUAL&gt;10 || FMT/GQ&gt;10   .. selects all samples at QUAL&gt;10 sites</pre><pre class="literallayout">TYPE="snp" &amp;&amp; QUAL&gt;=10 &amp;&amp; (DP4[2]+DP4[3] &gt; 2)</pre><pre class="literallayout">MIN(DP)&gt;35 &amp;&amp; AVG(GQ)&gt;50</pre><pre class="literallayout">ID=@file       .. selects lines with ID present in the file</pre><pre class="literallayout">ID!=@~/file    .. skip lines with ID present in the ~/file</pre><pre class="literallayout">MAF[0]&lt;0.05    .. select rare variants at 5% cutoff</pre><p><span class="strong"><strong>Shell expansion:</strong></span></p><p>Note that expressions must often be quoted because some characters
+</li></ul></div><p><span class="strong"><strong>Examples:</strong></span></p><pre class="literallayout">MIN(DV)&gt;5</pre><pre class="literallayout">MIN(DV/DP)&gt;0.3</pre><pre class="literallayout">MIN(DP)&gt;10 &amp; MIN(DV)&gt;3</pre><pre class="literallayout">FMT/DP&gt;10  &amp; FMT/GQ&gt;10 .. both conditions must be satisfied within one sample</pre><pre class="literallayout">FMT/DP&gt;10 &amp;&amp; FMT/GQ&gt;10 .. the conditions can be satisfied in different samples</pre><pre class="literallayout">QUAL&gt;10 |  FMT/GQ&gt;10   .. selects only GQ&gt;10 samples</pre><pre class="literallayout">QUAL&gt;10 || FMT/GQ&gt;10   .. selects all samples at QUAL&gt;10 sites</pre><pre class="literallayout">TYPE="snp" &amp;&amp; QUAL&gt;=10 &amp;&amp; (DP4[2]+DP4[3] &gt; 2)</pre><pre class="literallayout">MIN(DP)&gt;35 &amp;&amp; AVG(GQ)&gt;50</pre><pre class="literallayout">ID=@file       .. selects lines with ID present in the file</pre><pre class="literallayout">ID!=@~/file    .. skip lines with ID present in the ~/file</pre><pre class="literallayout">MAF[0]&lt;0.05    .. select rare variants at 5% cutoff</pre><pre class="literallayout">POS&gt;=100   .. restrict your range query, e.g. 20:100-200 to strictly sites with POS in that range.</pre><p><span class="strong"><strong>Shell expansion:</strong></span></p><p>Note that expressions must often be quoted because some characters
 have special meaning in the shell.
 An example of expression enclosed in single quotes which cause
 that the whole expression is passed to the program as intended:</p><pre class="literallayout">bcftools view -i '%ID!="." &amp; MAF[0]&lt;0.01'</pre><p>Please refer to the documentation of your shell for details.</p></div><div class="refsect1" title="SCRIPTS AND OPTIONS"><a id="_scripts_and_options"></a><h2>SCRIPTS AND OPTIONS</h2><div class="refsect2" title="plot-vcfstats [OPTIONS] file.vchk […]"><a id="plot-vcfstats"></a><h3>plot-vcfstats [<span class="emphasis"><em>OPTIONS</em></span>] <span class="emphasis"><em>file.vchk</em></span> […]</h3><p>Script for processing output of <span class="strong"><strong><a class="link" href="#stats" title="bcftools stats [OPTIONS] A.vcf.gz [B.vcf.gz]">bcftools stats</a></strong></span>. It can merge

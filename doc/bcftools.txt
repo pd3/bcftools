@@ -390,6 +390,149 @@ This command allows to add or remove annotations.
     bcftools annotate -a annots.bed.gz -h annots.hdr -c CHROM,FROM,TO,TAG input.vcf
 ----
 
+
+
+[[call]]
+=== bcftools call '[OPTIONS]' 'FILE'
+
+This command replaces the former *bcftools view* caller. Some of the original
+functionality has been temporarily lost in the process of transition under
+http://github.com/samtools/htslib[htslib], but will be added back on popular
+demand. The original calling model can be invoked with the *-c* option.
+
+==== File format options:
+
+*-O, --output-type* 'b'|'u'|'z'|'v'::
+    see *<<common_options,Common Options>>*
+
+*--ploidy* 'ASSEMBLY'['?'][[ploidy]]::
+    predefined ploidy, use 'list' (or any other unused word) to print a list
+    of all predefined assemblies. Append a question mark to print the actual
+    definition. See also *--ploidy-file*.
+
+*--ploidy-file* 'FILE'::
+    ploidy definition given as a space/tab-delimited list of
+    CHROM, FROM, TO, SEX, PLOIDY. The SEX codes are arbitrary and
+    correspond to the ones used by *<<samples_file,--samples-file>>*. 
+    The default ploidy can be given using the starred records (see
+    below), unlisted regions have ploidy 2. The default ploidy definition is
+----
+    X 1 60000 M 1
+    X 2699521 154931043 M 1
+    Y 1 59373566 M 1
+    Y 1 59373566 F 0
+    MT 1 16569 M 1
+    MT 1 16569 F 1
+    *  * *     M 2
+    *  * *     F 2
+----
+
+*-r, --regions* 'chr'|'chr:pos'|'chr:from-to'|'chr:from-'[,...]::
+    see *<<common_options,Common Options>>*
+
+*-R, --regions-file* 'FILE'::
+    see *<<common_options,Common Options>>*
+
+*-s, --samples* 'LIST'::
+    see *<<common_options,Common Options>>*
+
+*-S, --samples-file* 'FILE'::
+    see *<<common_options,Common Options>>*
+
+*-t, --targets* 'LIST'::
+    see *<<common_options,Common Options>>*
+
+*-T, --targets-file* 'FILE'::
+    see *<<common_options,Common Options>>*
+
+==== Input/output options:
+
+*-A, --keep-alts*::
+    output all alternate alleles present in the alignments even if they do not
+    appear in any of the genotypes
+
+*-f, --format-fields* 'list'::
+    comma-separated list of FORMAT fields to output for each sample. Currently
+    GQ and GP fields are supported. For convenience, the fields can be given
+    as lower case letters.
+
+*-F, --prior-freqs* 'AN','AC'::
+    take advantage of prior knowledge of population allele frequencies. The
+    workflow looks like this:
+----
+    # Extract AN,AC values from an existing VCF, such 1000Genomes
+    bcftools query -f'%CHROM\t%POS\t%REF\t%ALT\t%AN\t%AC\n' 1000Genomes.bcf | bgzip -c > AFs.tab.gz
+
+    # If the tags AN,AC are not already present, use the +fill-AN-AC plugin
+    bcftools +fill-AN-AC 1000Genomes.bcf | bcftools query -f'%CHROM\t%POS\t%REF\t%ALT\t%AN\t%AC\n' | bgzip -c > AFs.tab.gz
+
+    # Create a VCF header description, here we name the tags REF_AN,REF_AC
+    cat > AFs.hdr
+    ##INFO=<ID=REF_AN,Number=1,Type=Integer,Description="Total number of alleles in reference genotypes">
+    ##INFO=<ID=REF_AC,Number=A,Type=Integer,Description="Allele count in reference genotypes for each ALT allele">
+
+    # Now before calling, stream the raw mpileup output through `bcftools annotate` to add the frequencies
+    bcftools mpileup [...] -Ou | bcftools annotate -a AFs.tab.gz -h AFs.hdr -c CHROM,POS,REF,ALT,REF_AN,REF_AC -Ou | bcftools call -mv -F REF_AN,REF_AC [...]
+----
+
+*-g, --gvcf* 'INT'::
+    output also gVCF blocks of homozygous REF calls. The parameter 'INT' is the
+    minimum per-sample depth required to include a site in the non-variant
+    block.
+
+*-M, --keep-masked-ref*::
+    output sites where REF allele is N
+
+*-o, --output* 'FILE'::
+    see *<<common_options,Common Options>>*
+
+*-V, --skip-variants* 'snps'|'indels'::
+    skip indel/SNP sites
+
+*-v, --variants-only*::
+    output variant sites only
+
+==== Consensus/variant calling options:
+
+*-c, --consensus-caller*::
+    the original *samtools*/*bcftools* calling method (conflicts with *-m*)
+
+*-C, --constrain* 'alleles'|'trio'::
+
+        'alleles';;
+            call genotypes given alleles. See also *-T, --targets-file*.
+
+        'trio';;
+            call genotypes given the father-mother-child constraint. See also
+            *-s, --samples* and *-n, --novel-rate*.
+
+*-m, --multiallelic-caller*::
+    alternative modelfor multiallelic and rare-variant calling designed to
+    overcome known limitations in *-c* calling model (conflicts with *-c*)
+
+*-n, --novel-rate* 'float'[,...]::
+    likelihood of novel mutation for constrained *-C* 'trio' calling. The trio
+    genotype calling maximizes likelihood of a particular combination of
+    genotypes for father, mother and the child
+    P(F=i,M=j,C=k) = P(unconstrained) * Pn + P(constrained) * (1-Pn).
+    By providing three values, the mutation rate Pn is set explictly for SNPs,
+    deletions and insertions, respectively.  If two values are given, the first
+    is interpreted as the mutation rate of SNPs and the second is used to
+    calculate the mutation rate of indels according to their length as
+    Pn='float'*exp(-a-b*len), where a=22.8689, b=0.2994 for insertions and
+    a=21.9313, b=0.2856 for deletions [pubmed:23975140].  If only one value is
+    given, the same mutation rate Pn is used for SNPs and indels.
+
+*-p, --pval-threshold* 'float'::
+    with *-c*, accept variant if P(ref|D) < 'float'.
+
+*-P, --prior* 'float'::
+    expected substitution rate, or 0 to disable the prior.
+
+*-t, --targets* 'file'|'chr'|'chr:pos'|'chr:from-to'|'chr:from-'[,...]::
+    see *<<common_options,Common Options>>*
+
+
 [[cnv]]
 === bcftools cnv '[OPTIONS]' 'FILE'
 
@@ -473,129 +616,6 @@ loss), 0 (complete loss), 3 (single-copy gain).
     the HMM probability of transition to another copy number state. Increasing this
     values leads to smaller and more frequent calls.
 
-
-
-
-[[call]]
-=== bcftools call '[OPTIONS]' 'FILE'
-
-This command replaces the former *bcftools view* caller. Some of the original
-functionality has been temporarily lost in the process of transition under
-http://github.com/samtools/htslib[htslib], but will be added back on popular
-demand. The original calling model can be invoked with the *-c* option.
-
-==== File format options:
-
-*-O, --output-type* 'b'|'u'|'z'|'v'::
-    see *<<common_options,Common Options>>*
-
-*--ploidy* 'ASSEMBLY'['?'][[ploidy]]::
-    predefined ploidy, use 'list' (or any other unused word) to print a list
-    of all predefined assemblies. Append a question mark to print the actual
-    definition. See also *--ploidy-file*.
-
-*--ploidy-file* 'FILE'::
-    ploidy definition given as a space/tab-delimited list of
-    CHROM, FROM, TO, SEX, PLOIDY. The SEX codes are arbitrary and
-    correspond to the ones used by *<<samples_file,--samples-file>>*. 
-    The default ploidy can be given using the starred records (see
-    below), unlisted regions have ploidy 2. The default ploidy definition is
-----
-    X 1 60000 M 1
-    X 2699521 154931043 M 1
-    Y 1 59373566 M 1
-    Y 1 59373566 F 0
-    MT 1 16569 M 1
-    MT 1 16569 F 1
-    *  * *     M 2
-    *  * *     F 2
-----
-
-*-r, --regions* 'chr'|'chr:pos'|'chr:from-to'|'chr:from-'[,...]::
-    see *<<common_options,Common Options>>*
-
-*-R, --regions-file* 'FILE'::
-    see *<<common_options,Common Options>>*
-
-*-s, --samples* 'LIST'::
-    see *<<common_options,Common Options>>*
-
-*-S, --samples-file* 'FILE'::
-    see *<<common_options,Common Options>>*
-
-*-t, --targets* 'LIST'::
-    see *<<common_options,Common Options>>*
-
-*-T, --targets-file* 'FILE'::
-    see *<<common_options,Common Options>>*
-
-==== Input/output options:
-
-*-A, --keep-alts*::
-    output all alternate alleles present in the alignments even if they do not
-    appear in any of the genotypes
-
-*-f, --format-fields* 'list'::
-    comma-separated list of FORMAT fields to output for each sample. Currently
-    GQ and GP fields are supported. For convenience, the fields can be given
-    as lower case letters.
-
-*-g, --gvcf* 'INT'::
-    output also gVCF blocks of homozygous REF calls. The parameter 'INT' is the
-    minimum per-sample depth required to include a site in the non-variant
-    block.
-
-*-M, --keep-masked-ref*::
-    output sites where REF allele is N
-
-*-o, --output* 'FILE'::
-    see *<<common_options,Common Options>>*
-
-*-V, --skip-variants* 'snps'|'indels'::
-    skip indel/SNP sites
-
-*-v, --variants-only*::
-    output variant sites only
-
-==== Consensus/variant calling options:
-
-*-c, --consensus-caller*::
-    the original *samtools*/*bcftools* calling method (conflicts with *-m*)
-
-*-C, --constrain* 'alleles'|'trio'::
-
-        'alleles';;
-            call genotypes given alleles. See also *-T, --targets-file*.
-
-        'trio';;
-            call genotypes given the father-mother-child constraint. See also
-            *-s, --samples* and *-n, --novel-rate*.
-
-*-m, --multiallelic-caller*::
-    alternative modelfor multiallelic and rare-variant calling designed to
-    overcome known limitations in *-c* calling model (conflicts with *-c*)
-
-*-n, --novel-rate* 'float'[,...]::
-    likelihood of novel mutation for constrained *-C* 'trio' calling. The trio
-    genotype calling maximizes likelihood of a particular combination of
-    genotypes for father, mother and the child
-    P(F=i,M=j,C=k) = P(unconstrained) * Pn + P(constrained) * (1-Pn).
-    By providing three values, the mutation rate Pn is set explictly for SNPs,
-    deletions and insertions, respectively.  If two values are given, the first
-    is interpreted as the mutation rate of SNPs and the second is used to
-    calculate the mutation rate of indels according to their length as
-    Pn='float'*exp(-a-b*len), where a=22.8689, b=0.2994 for insertions and
-    a=21.9313, b=0.2856 for deletions [pubmed:23975140].  If only one value is
-    given, the same mutation rate Pn is used for SNPs and indels.
-
-*-p, --pval-threshold* 'float'::
-    with *-c*, accept variant if P(ref|D) < 'float'.
-
-*-P, --prior* 'float'::
-    expected substitution rate, or 0 to disable the prior.
-
-*-t, --targets* 'file'|'chr'|'chr:pos'|'chr:from-to'|'chr:from-'[,...]::
-    see *<<common_options,Common Options>>*
 
 
 [[concat]]

@@ -615,6 +615,7 @@ static void usage(args_t *args)
     fprintf(stderr, "Input/output options:\n");
     fprintf(stderr, "   -A, --keep-alts                 keep all possible alternate alleles at variant sites\n");
     fprintf(stderr, "   -f, --format-fields <list>      output format fields: GQ,GP (lowercase allowed) []\n");
+    fprintf(stderr, "   -F, --prior-freqs <AN,AC>       use prior allele frequencies\n");
     fprintf(stderr, "   -g, --gvcf <int>,[...]          group non-variant sites into gVCF blocks by minimum per-sample DP\n");
     fprintf(stderr, "   -i, --insert-missed             output also sites missed by mpileup but present in -T\n");
     fprintf(stderr, "   -M, --keep-masked-ref           keep sites with masked reference allele (REF=N)\n");
@@ -662,6 +663,7 @@ int main_vcfcall(int argc, char *argv[])
     {
         {"help",0,0,'h'},
         {"format-fields",1,0,'f'},
+        {"prior-freqs",1,0,'F'},
         {"gvcf",1,0,'g'},
         {"output",1,0,'o'},
         {"output-type",1,0,'O'},
@@ -691,7 +693,7 @@ int main_vcfcall(int argc, char *argv[])
     };
 
     char *tmp = NULL;
-    while ((c = getopt_long(argc, argv, "h?o:O:r:R:s:S:t:T:ANMV:vcmp:C:n:P:f:ig:XY", loptions, NULL)) >= 0)
+    while ((c = getopt_long(argc, argv, "h?o:O:r:R:s:S:t:T:ANMV:vcmp:C:n:P:f:ig:XYF:", loptions, NULL)) >= 0)
     {
         switch (c)
         {
@@ -706,6 +708,13 @@ int main_vcfcall(int argc, char *argv[])
             case 'c': args.flag |= CF_CCALL; break;          // the original EM based calling method
             case 'i': args.flag |= CF_INS_MISSED; break;
             case 'v': args.aux.flag |= CALL_VARONLY; break;
+            case 'F': 
+                args.aux.prior_AN = optarg;
+                args.aux.prior_AC = index(optarg,',');
+                if ( !args.aux.prior_AC ) error("Expected two tags with -F (e.g. AN,AC), got \"%s\"\n",optarg);
+                *args.aux.prior_AC = 0;
+                args.aux.prior_AC++;
+                break;
             case 'g': 
                 args.gvcf = gvcf_init(optarg);
                 if ( !args.gvcf ) error("Could not parse: --gvcf %s\n", optarg);
