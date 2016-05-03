@@ -466,6 +466,9 @@ demand. The original calling model can be invoked with the *-c* option.
     # If the tags AN,AC are not already present, use the +fill-AN-AC plugin
     bcftools +fill-AN-AC 1000Genomes.bcf | bcftools query -f'%CHROM\t%POS\t%REF\t%ALT\t%AN\t%AC\n' | bgzip -c > AFs.tab.gz
 
+    # Index the annotation file
+    tabix -s1 -b2 -e2 AFs.tab.gz
+
     # Create a VCF header description, here we name the tags REF_AN,REF_AC
     cat > AFs.hdr
     ##INFO=<ID=REF_AN,Number=1,Type=Integer,Description="Total number of alleles in reference genotypes">
