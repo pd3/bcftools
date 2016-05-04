@@ -53,13 +53,15 @@ pop_t;
 
 typedef struct
 {
+    int argc;
+    char **argv;
     bcf_hdr_t *hdr;
     trio_t *trio;
     int ntrio, mtrio;
     int32_t *gt_arr;
     int npop;
     pop_t *pop;
-    int mgt_arr;
+    int mgt_arr, prev_rid;
 }
 args_t;
 
@@ -118,9 +120,10 @@ void parse_ped(args_t *args, char *fname)
         trio->mother = mother;
         trio->child  = child;
 
-        char *pop_name = strdup(&str.s[off[6]]);
+        char *pop_name = &str.s[off[6]];
         if ( !khash_str2int_has_key(pop2i,pop_name) )
         {
+            pop_name = strdup(&str.s[off[6]]);
             khash_str2int_set(pop2i,pop_name,args->npop);
             args->npop++;
             args->pop = (pop_t*) realloc(args->pop,args->npop*sizeof(*args->pop));
@@ -140,6 +143,8 @@ void parse_ped(args_t *args, char *fname)
 int init(int argc, char **argv, bcf_hdr_t *in, bcf_hdr_t *out)
 {
     memset(&args,0,sizeof(args_t));
+    args.argc   = argc; args.argv = argv;
+    args.prev_rid = -1;
     args.hdr = in;
     char *ped_fname = NULL;
     static struct option loptions[] =
@@ -187,8 +192,14 @@ bcf1_t *process(bcf1_t *rec)
     ngt /= bcf_hdr_nsamples(args.hdr);
     if ( ngt!=2 ) return NULL;
 
-    gt_t child, father, mother;
     int i;
+    if ( rec->rid!=args.prev_rid )
+    {
+        args.prev_rid = rec->rid;
+        for (i=0; i<args.ntrio; i++) args.trio[i].prev = 0;
+    }
+
+    gt_t child, father, mother;
     for (i=0; i<args.ntrio; i++)
     {
         trio_t *trio = &args.trio[i];
@@ -217,9 +228,12 @@ bcf1_t *process(bcf1_t *rec)
 
 void destroy(void)
 {
+    int i;
+    printf("# This file was produced by: bcftools +trio-switch-rate(%s+htslib-%s)\n", bcftools_version(),hts_version());
+    printf("# The command line was:\tbcftools +%s", args.argv[0]);
+    for (i=1; i<args.argc; i++) printf(" %s",args.argv[i]); printf("\n#\n");
     printf("# TRIO\t[2]Father\t[3]Mother\t[4]Child\t[5]nTested\t[6]nMendelian Errors\t[7]nSwitch\t[8]nSwitch (%%)\n");
     printf("# POP\t[2]Name\t[3]\t[4]Number of trios\t[5]avgTested\t[6]avgMendelian Errors\t[7]avgSwitch\t[8]avgSwitch (%%)\n");
-    int i;
     for (i=0; i<args.ntrio; i++)
     {
         trio_t *trio = &args.trio[i];
