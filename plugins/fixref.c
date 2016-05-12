@@ -102,18 +102,24 @@ args_t args;
 
 const char *about(void)
 {
-    return "Fix reference strand orientation, e.g. Illumina/TOP to fwd.\n";
+    return "Fix reference strand orientation, e.g. from Illumina/TOP to fwd.\n";
 }
 
 const char *usage(void)
 {
     return 
         "\n"
-        "About: Fix strand orientation\n"
-        "           flip .. flip non-ambiguous SNPs and ignore the rest\n"
-        "           top  .. from Illumina TOP strand to fwd\n"
-        "       Do not use the tool blindly, first make an effort to learn what strand\n"
-        "       convention your data uses.\n"
+        "About: This tool helps to determine and fix strand orientation.\n"
+        "       Currently the following modes are recognised:\n"
+        "           flip  .. flips non-ambiguous SNPs and ignores the rest\n"
+        "           stats .. converts from Illumina TOP strand to fwd\n"
+        "           top   .. converts from Illumina TOP strand to fwd\n"
+        "\n"
+        "       WARNING: Do not use the program blindly, make an effort to\n"
+        "       understand what strand convention your data uses! Make sure\n"
+        "       the reason for mismatching REF alleles is not a different\n"
+        "       reference build!!\n"
+        "\n"
         "Usage: bcftools +fixref [General Options] -- [Plugin Options]\n"
         "Options:\n"
         "   run \"bcftools plugin\" for a list of common options\n"
@@ -121,11 +127,17 @@ const char *usage(void)
         "Plugin options:\n"
         "   -d, --discard           Discard sites which could not be resolved\n"
         "   -f, --ref <file.fa>     Reference sequence\n"
-        "   -m, --mode <string>     Convert from Illumina TOP (\"top\"), by simple flipping (\"flip\")\n"
-        "   -s, --stats             Collect statistics to help determine strand orientation\n"
+        "   -m, --mode <string>     Collect stats (\"stats\") or convert (\"top\", \"flip\") [stats]\n"
         "\n"
-        "Example:\n"
-        "   bcftools +fixref file.bcf -- -c -f ref.fa\n"
+        "Examples:\n"
+        "   # run stats\n"
+        "   bcftools +fixref file.bcf -- -f ref.fa\n"
+        "\n"
+        "   # convert from TOP to fwd\n"
+        "   bcftools +fixref file.bcf -Ob -o out.bcf -- -f ref.fa -m top\n"
+        "\n"
+        "   # assuming the reference build is correct, just flip to fwd, discarding the rest\n"
+        "   bcftools +fixref file.bcf -Ob -o out.bcf -- -d -f ref.fa -m flip\n"
         "\n";
 }
 
@@ -139,21 +151,20 @@ int init(int argc, char **argv, bcf_hdr_t *in, bcf_hdr_t *out)
     {
         {"mode",1,0,'m'},
         {"discard",0,0,'d'},
-        {"stats",0,0,'s'},
         {"ref",1,0,'f'},
         {0,0,0,0}
     };
     char c;
-    while ((c = getopt_long(argc, argv, "?hsf:m:d",loptions,NULL)) >= 0)
+    while ((c = getopt_long(argc, argv, "?hf:m:d",loptions,NULL)) >= 0)
     {
         switch (c) 
         {
             case 'm': 
                 if ( !strcasecmp(optarg,"top") ) args.mode = MODE_TOP2FWD; 
                 else if ( !strcasecmp(optarg,"flip") ) args.mode = MODE_FLIP2FWD; 
+                else if ( !strcasecmp(optarg,"stats") ) args.mode = MODE_STATS; 
                 else error("The source strand convention not recognised: %s\n", optarg);
                 break;
-            case 's': args.mode = MODE_STATS; break;
             case 'd': args.discard = 1; break;
             case 'f': ref_fname = optarg; break;
             case 'h':
