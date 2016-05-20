@@ -528,7 +528,7 @@ int parse_line(args_t *args, bcf1_t *line, double *alt_freq, double *pdg)
     }
     else
     {
-        // Use GTs or AC/AN: GTs when AC/AN not present or when GTs explicitly requested by --estimate-AF
+        // Use AC/AN
         int AC = -1, AN = 0;
         ret = bcf_get_info_int32(args->hdr, line, "AN", &args->itmp, &args->mitmp);
         if ( ret==1 )
