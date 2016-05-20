@@ -46,7 +46,7 @@ OBJS     = main.o vcfindex.o tabix.o \
            vcfnorm.o vcfgtcheck.o vcfview.o vcfannotate.o vcfroh.o vcfconcat.o \
            vcfcall.o mcall.o vcmp.o gvcf.o reheader.o convert.o vcfconvert.o tsv2vcf.o \
            vcfcnv.o HMM.o vcfplugin.o consensus.o ploidy.o version.o \
-           mpileup.o bam2bcf.o bam2bcf_indel.o sample.o \
+           mpileup.o bam2bcf.o bam2bcf_indel.o sample.o hclust.o \
            ccall.o em.o prob1.o kmin.o # the original samtools calling
 
 EXTRA_CPPFLAGS = -I. -I$(HTSDIR) -DPLUGINPATH=\"$(pluginpath)\"
@@ -183,6 +183,7 @@ peakfit.o: peakfit.c peakfit.h $(htslib_hts_h) $(HTSDIR)/htslib/kstring.h
 consensus.o: consensus.c $(htslib_hts_h) $(HTSDIR)/htslib/kseq.h rbuf.h $(bcftools_h) $(HTSDIR)/htslib/regidx.h
 version.o: version.h version.c
 mpileup.o: mpileup.c bam2bcf.h $(HTSDIR)/htslib/regidx.h
+hclust.o: hclust.c hclust.h
 
 test/test-rbuf.o: test/test-rbuf.c rbuf.h
 
