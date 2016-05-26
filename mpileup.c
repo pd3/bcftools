@@ -268,12 +268,21 @@ static void group_smpl(mplp_pileup_t *m, bam_sample_t *sm, kstring_t *buf,
             const bam_pileup1_t *p = plp[i] + j;
             uint8_t *q;
             int id = -1;
-            q = ignore_rg? 0 : bam_aux_get(p->b, "RG");
-            if (q) id = bam_smpl_rg2smid(sm, fn[i], (char*)q+1, buf);
+            if (!ignore_rg) {
+                // We need a generic client-data element in pileup_t for us to
+                // attach whatever we like, but in the absense of that we hack it!
+                if (!(p->b->core.flag & (1<<15))) {
+                    if ((q = bam_aux_get(p->b, "RG"))) {
+                        id = bam_smpl_rg2smid(sm, fn[i], (char*)q+1, buf);
+                    }
+                    p->b->core.flag |= (1<<15);
+                    p->b->core.isize = id;
+                }
+                id = p->b->core.isize;
+            }
             if (id < 0) id = bam_smpl_rg2smid(sm, fn[i], 0, buf);
             if (id < 0 || id >= m->n) {
-                assert(q); // otherwise a bug
-                fprintf(stderr, "[%s] Read group %s used in file %s but absent from the header or an alignment missing read group.\n", __func__, (char*)q+1, fn[i]);
+                fprintf(stderr, "[%s] Read group used in file %s but absent from the header or an alignment missing read group.\n", __func__, fn[i]);
                 exit(1);
             }
             if (m->n_plp[id] == m->m_plp[id]) {
