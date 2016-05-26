@@ -77,16 +77,26 @@ void bcf_call_destroy(bcf_callaux_t *bca)
     free(bca->bases); free(bca->inscns); free(bca);
 }
 
-// FIXME: cache the last location in the cigar so we can iteratively call
-// this without the full icig loop.
-// Possibly overloading p->level for this as it's unused here.
+// WARNING: This abuses p->b->core.mpos to cache the length.
+// The correct solution here would be to extend the pileup structure, but
+// we need to agree to break the ABI to do this.  If doing it, also see
+// Heng's p->aux hack (indel) and the analogous p->b->core.isize hack
+// (by me again, sorry!).
 //
 // position in the sequence with respect to the aligned part of the read
 static int get_position(const bam_pileup1_t *p, int *len)
 {
     int icig, n_tot_bases = 0, iread = 0, edist = p->qpos + 1;
+
     for (icig=0; icig<p->b->core.n_cigar; icig++)
     {
+        // First time through compute the length, otherwise
+        // we can bail out early.
+        if (p->b->core.mpos && icig >= 2) {
+            *len = p->b->core.mpos;
+            return edist;
+        }
+
         int cig  = bam_get_cigar(p->b)[icig] & BAM_CIGAR_MASK;
         int ncig = bam_get_cigar(p->b)[icig] >> BAM_CIGAR_SHIFT;
         if ( cig==BAM_CMATCH || cig==BAM_CEQUAL || cig==BAM_CDIFF )
@@ -114,7 +124,7 @@ static int get_position(const bam_pileup1_t *p, int *len)
         fprintf(stderr,"todo: cigar %d\n", cig);
         assert(0);
     }
-    *len = n_tot_bases;
+    *len = p->b->core.mpos = n_tot_bases;
     return edist;
 }
 
