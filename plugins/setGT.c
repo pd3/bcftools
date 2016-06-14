@@ -67,7 +67,7 @@ const char *usage(void)
         "           ./x  .. partially missing (e.g., \"./0\" or \".|1\" but not \"./.\")\n"
         "           .    .. partially or completely missing\n"
         "           a    .. all genotypes\n"
-        "           ?    .. select genotypes using -i/-e options\n"
+        "           q    .. select genotypes using -i/-e options\n"
         "       and the new genotype can be one of:\n"
         "           .    .. missing (\".\" or \"./.\", keeps ploidy)\n"
         "           0    .. reference allele\n"
@@ -89,7 +89,7 @@ const char *usage(void)
         "   bcftools +setGT in.vcf -- -t . -n 0p\n"
         "\n"
         "   # set missing genotypes with DP>0 and GQ>20 to ref genotypes (\"0/0\")\n"
-        "   bcftools +setGT in.vcf -- -t ? -n 0 -i 'GT=\".\" && FMT/DP>0 && GQ>20'\n"
+        "   bcftools +setGT in.vcf -- -t q -n 0 -i 'GT=\".\" && FMT/DP>0 && GQ>20'\n"
         "\n"
         "   # set partially missing genotypes to completely missing\n"
         "   bcftools +setGT in.vcf -- -t ./x -n .\n"
@@ -105,7 +105,7 @@ int init(int argc, char **argv, bcf_hdr_t *in, bcf_hdr_t *out)
         {"include",1,0,'i'},
         {"exclude",1,0,'e'},
         {"new-gt",1,0,'n'},
-        {"target-gt",0,0,'t'},
+        {"target-gt",1,0,'t'},
         {0,0,0,0}
     };
     while ((c = getopt_long(argc, argv, "?hn:t:i:e:",loptions,NULL)) >= 0)
@@ -120,13 +120,16 @@ int init(int argc, char **argv, bcf_hdr_t *in, bcf_hdr_t *out)
                 if ( strchr(optarg,'M') ) new_mask |= GT_MAJOR;
                 if ( strchr(optarg,'p') ) new_mask |= GT_PHASED;
                 if ( strchr(optarg,'u') ) new_mask |= GT_UNPHASED;
+                if ( new_mask==0 ) error("Unknown parameter to --new-gt: %s\n", optarg);
                 break;
             case 't':
                 if ( !strcmp(optarg,".") ) tgt_mask |= GT_MISSING|GT_PARTIAL;
                 if ( !strcmp(optarg,"./x") ) tgt_mask |= GT_PARTIAL;
                 if ( !strcmp(optarg,"./.") ) tgt_mask |= GT_MISSING;
                 if ( !strcmp(optarg,"a") ) tgt_mask |= GT_ALL;
-                if ( !strcmp(optarg,"?") ) tgt_mask |= GT_QUERY;
+                if ( !strcmp(optarg,"q") ) tgt_mask |= GT_QUERY;
+                if ( !strcmp(optarg,"?") ) tgt_mask |= GT_QUERY;        // for backward compatibility
+                if ( tgt_mask==0 ) error("Unknown parameter to --target-gt: %s\n", optarg);
                 break;
             case 'h':
             case '?':
