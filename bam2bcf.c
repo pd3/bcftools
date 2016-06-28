@@ -77,12 +77,26 @@ void bcf_call_destroy(bcf_callaux_t *bca)
     free(bca->bases); free(bca->inscns); free(bca);
 }
 
+// WARNING: This abuses p->b->core.mpos to cache the length.
+// The correct solution here would be to extend the pileup structure, but
+// we need to agree to break the ABI to do this.  If doing it, also see
+// Heng's p->aux hack (indel) and the analogous p->b->core.isize hack
+// (by me again, sorry!).
+//
 // position in the sequence with respect to the aligned part of the read
 static int get_position(const bam_pileup1_t *p, int *len)
 {
     int icig, n_tot_bases = 0, iread = 0, edist = p->qpos + 1;
+
     for (icig=0; icig<p->b->core.n_cigar; icig++)
     {
+        // First time through compute the length, otherwise
+        // we can bail out early.
+        if (p->b->core.mpos && icig >= 2) {
+            *len = p->b->core.mpos;
+            return edist;
+        }
+
         int cig  = bam_get_cigar(p->b)[icig] & BAM_CIGAR_MASK;
         int ncig = bam_get_cigar(p->b)[icig] >> BAM_CIGAR_SHIFT;
         if ( cig==BAM_CMATCH || cig==BAM_CEQUAL || cig==BAM_CDIFF )
@@ -110,7 +124,7 @@ static int get_position(const bam_pileup1_t *p, int *len)
         fprintf(stderr,"todo: cigar %d\n", cig);
         assert(0);
     }
-    *len = n_tot_bases;
+    *len = p->b->core.mpos = n_tot_bases;
     return edist;
 }
 
@@ -126,6 +140,12 @@ void bcf_callaux_clean(bcf_callaux_t *bca, bcf_call_t *call)
     memset(bca->rev_mqs,0,sizeof(int)*bca->nqual);
     if ( call->ADF ) memset(call->ADF,0,sizeof(int32_t)*(call->n+1)*B2B_MAX_ALLELES);
     if ( call->ADR ) memset(call->ADR,0,sizeof(int32_t)*(call->n+1)*B2B_MAX_ALLELES);
+#ifdef TRACK_EXTENTS
+    bca->epos_ref_max = bca->epos_alt_max = 0;
+    bca->imq_ref_max = bca->imq_alt_max = 0;
+    bca->ibq_ref_max = bca->ibq_alt_max = 0;
+    bca->imq_fwd_max = bca->imq_rev_max = 0;
+#endif
 }
 
 /*
@@ -168,6 +188,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
     // fill the bases array
     for (i = n = 0; i < _n; ++i) {
         const bam_pileup1_t *p = pl + i;
+
         int q, b, mapQ, baseQ, is_diff, min_dist, seqQ;
         // set base
         if (p->is_del || p->is_refskip || (p->b->core.flag&BAM_FUNMAP)) continue;
@@ -175,8 +196,8 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
         mapQ  = p->b->core.qual < 255? p->b->core.qual : DEF_MAPQ; // special case for mapQ==255
         if ( !mapQ ) r->mq0++;
         baseQ = q = is_indel? p->aux&0xff : (int)bam_get_qual(p->b)[p->qpos]; // base/indel quality
-        seqQ = is_indel? (p->aux>>8&0xff) : 99;
         if (q < bca->min_baseQ) continue;
+        seqQ = is_indel? (p->aux>>8&0xff) : 99;
         if (q > seqQ) q = seqQ;
         mapQ = mapQ < bca->capQ? mapQ : bca->capQ;
         if (q > mapQ) q = mapQ;
@@ -191,6 +212,14 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
             is_diff = (b != 0);
         }
         bca->bases[n++] = q<<5 | (int)bam_is_rev(p->b)<<4 | b;
+
+        // do this div now to give us time for the result to be available.
+        // FIXME: cache this.  len isn't ever changing for this read, so
+        // could be stored in p->len.  Also we could track the last pos
+        // in the cigar.  This may have a big win for PacBio/ONT data.
+        int len, pos = get_position(p, &len);
+        double plen = (double)pos/(len+1);
+
         // collect annotations
         if (b < 4)
         {
@@ -217,23 +246,50 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
         // collect for bias tests
         if ( baseQ > 59 ) baseQ = 59;
         if ( mapQ > 59 ) mapQ = 59;
-        int len, pos = get_position(p, &len);
-        int epos = (double)pos/(len+1) * bca->npos;
-        int ibq  = baseQ/60. * bca->nqual;
-        int imq  = mapQ/60. * bca->nqual;
-        if ( bam_is_rev(p->b) ) bca->rev_mqs[imq]++;
-        else bca->fwd_mqs[imq]++;
+
+        int epos = plen * bca->npos;
+        // This integer differs to (double)pos/(len+1) * bca->npos due to
+        // float rounding differences (errors infact).
+        // We'd also want to use int64_t anyway to permit 32-bit read lengths.
+        //
+        // int epos = (pos*bca->npos)/(len+1);
+
+        // Provided mapQ * nqual are 16-bit this is fine.  Nqual is hard coded
+        // as 100 and mapQ bounded in SAM to be < 256, so it's valid.
+        int32_t imq  = (mapQ  * bca->nqual)/60;
+        int32_t ibq  = (baseQ * bca->nqual)/60;
+        if ( bam_is_rev(p->b) ) {
+#ifdef TRACK_EXTENTS
+            if (bca->imq_rev_max < imq) bca->imq_rev_max = imq;
+#endif
+            bca->rev_mqs[imq]++;
+        } else {
+#ifdef TRACK_EXTENTS
+            if (bca->imq_fwd_max < imq) bca->imq_fwd_max = imq;
+#endif
+            bca->fwd_mqs[imq]++;
+        }
         if ( bam_seqi(bam_get_seq(p->b),p->qpos) == ref_base )
         {
             bca->ref_pos[epos]++;
             bca->ref_bq[ibq]++;
             bca->ref_mq[imq]++;
+#ifdef TRACK_EXTENTS
+            if (bca->epos_ref_max < epos) bca->epos_ref_max = epos;
+            if (bca->ibq_ref_max  < ibq)  bca->ibq_ref_max  = ibq;
+            if (bca->imq_ref_max  < imq)  bca->imq_ref_max  = imq;
+#endif
         }
         else
         {
             bca->alt_pos[epos]++;
             bca->alt_bq[ibq]++;
             bca->alt_mq[imq]++;
+#ifdef TRACK_EXTENTS
+            if (bca->epos_alt_max < epos) bca->epos_alt_max = epos;
+            if (bca->ibq_alt_max  < ibq)  bca->ibq_alt_max  = ibq;
+            if (bca->imq_alt_max  < imq)  bca->imq_alt_max  = imq;
+#endif
         }
     }
     r->ori_depth = ori_depth;
@@ -351,11 +407,39 @@ double calc_chisq_bias(int *a, int *b, int n)
     return prob;
 }
 
-double mann_whitney_1947(int n, int m, int U)
+double mann_whitney_1947_(int n, int m, int U)
 {
     if (U<0) return 0;
     if (n==0||m==0) return U==0 ? 1 : 0;
-    return (double)n/(n+m)*mann_whitney_1947(n-1,m,U-m) + (double)m/(n+m)*mann_whitney_1947(n,m-1,U);
+    return (double)n/(n+m)*mann_whitney_1947_(n-1,m,U-m) + (double)m/(n+m)*mann_whitney_1947_(n,m-1,U);
+}
+
+//double mann_whitney_1947(int n, int m, int U)
+//{
+//    // FIXME: consider full expansion of this up front to remove
+//    // the test and also make it thread safe.
+//    static double mw[8][8][50] = {{{0}}};
+//
+//    if (n < 8 && m < 8 && U < 50) {
+//        if (mw[n][m][U] == 0) {
+//            mw[n][m][U] = mann_whitney_1947_(n,m,U);
+//            fprintf(stderr, "MW %d %d %d = %f\n", n,m,U,mw[n][m][U]);
+//        }
+//        return mw[n][m][U];
+//    }
+//
+//    return mann_whitney_1947_(n,m,U);
+//}
+
+double mann_whitney_1947(int n, int m, int U)
+{
+    #include "mw.h"
+
+    assert(n >= 2 && m >= 2);
+
+    return (n < 8 && m < 8 && U < 50)
+        ? mw[n-2][m-2][U]
+        : mann_whitney_1947_(n,m,U);
 }
 
 double mann_whitney_1947_cdf(int n, int m, int U)
@@ -415,13 +499,29 @@ double calc_mwu_bias(int *a, int *b, int n)
 {
     int na = 0, nb = 0, i;
     double U = 0, ties = 0;
+//    for (i=0; i<n; i++)
+//    {
+//        na += a[i];
+//        U  += a[i] * (nb + b[i]*0.5);
+//        nb += b[i];
+//        if ( a[i] && b[i] )
+//        {
+//            double tie = a[i] + b[i];
+//            ties += (tie*tie-1)*tie;
+//        }
+//    }
     for (i=0; i<n; i++)
     {
-        na += a[i];
-        U  += a[i] * (nb + b[i]*0.5);
-        nb += b[i];
-        if ( a[i] && b[i] )
-        {
+        if (!a[i]) {
+            if (!b[i]) continue;
+            nb += b[i];
+        } else if (!b[i]) {
+            na += a[i];
+            U  += a[i] * nb;
+        } else {
+            na += a[i];
+            U  += a[i] * (nb + b[i]*0.5);
+            nb += b[i];
             double tie = a[i] + b[i];
             ties += (tie*tie-1)*tie;
         }
@@ -451,6 +551,84 @@ double calc_mwu_bias(int *a, int *b, int n)
     // Exact calculation
     return mann_whitney_1947(na,nb,U) * sqrt(2*M_PI*var2);
 }
+
+#ifdef TRACK_EXTENTS
+double calc_mwu_bias2(int *a, int *b, int an, int bn)
+{
+    int na = 0, nb = 0, i;
+    double U = 0, ties = 0;
+
+    if (an == bn && an == 0) {
+        return HUGE_VAL;
+    } else if (an < bn) {
+        for (i=0; i<an; i++) {
+            if (!a[i]) {
+                if (!b[i]) continue;
+                nb += b[i];
+            } else if (!b[i]) {
+                na += a[i];
+                U  += a[i] * nb;
+            } else {
+                na += a[i];
+                U  += a[i] * (nb + b[i]*0.5);
+                nb += b[i];
+                double tie = a[i] + b[i];
+                ties += (tie*tie-1)*tie;
+            }
+        }
+        // a[i] == 0 from here on
+        for (; i<bn; i++) nb += b[i];
+    } else {
+        for (i=0; i<bn; i++) {
+            if (!a[i]) {
+                if (!b[i]) continue;
+                nb += b[i];
+            } else if (!b[i]) {
+                na += a[i];
+                U  += a[i] * nb;
+            } else {
+                na += a[i];
+                U  += a[i] * (nb + b[i]*0.5);
+                nb += b[i];
+                if ( a[i] && b[i] ) {
+                    double tie = a[i] + b[i];
+                    ties += (tie*tie-1)*tie;
+                }
+            }
+        }
+        // b[i] == 0 from here on
+        for (; i<an; i++) {
+            na += a[i];
+            U  += a[i] * nb;
+        }
+    }
+
+    if ( !na || !nb ) return HUGE_VAL;
+    if ( na==1 || nb==1 ) return 1.0;       // Flat probability, all U values are equally likely
+
+    double mean = ((double)na*nb)*0.5;
+    if ( na==2 || nb==2 )
+    {
+        // Linear approximation
+        return U>mean ? (2.0*mean-U)/mean : U/mean;
+    }
+    // Correction for ties:
+    //      double N = na+nb;
+    //      double var2 = (N*N-1)*N-ties;
+    //      if ( var2==0 ) return 1.0;
+    //      var2 *= ((double)na*nb)/N/(N-1)/12.0;
+    // No correction for ties:
+    double var2 = ((double)na*nb)*(na+nb+1)/12.0;
+    if ( na>=8 || nb>=8 )
+    {
+        // Normal approximation, very good for na>=8 && nb>=8 and reasonable if na<8 or nb<8
+        return exp(-0.5*(U-mean)*(U-mean)/var2);
+    }
+
+    // Exact calculation
+    return mann_whitney_1947(na,nb,U) * sqrt(2*M_PI*var2);
+}
+#endif
 
 static inline double logsumexp2(double a, double b)
 {
@@ -679,10 +857,21 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
     // calc_chisq_bias("XMQ", call->bcf_hdr->id[BCF_DT_CTG][call->tid].key, call->pos, bca->ref_mq, bca->alt_mq, bca->nqual);
     // calc_chisq_bias("XBQ", call->bcf_hdr->id[BCF_DT_CTG][call->tid].key, call->pos, bca->ref_bq, bca->alt_bq, bca->nqual);
 
+#ifdef TRACK_EXTENTS
+    call->mwu_pos = calc_mwu_bias2(bca->ref_pos, bca->alt_pos,
+                                   bca->epos_ref_max+1, bca->epos_alt_max+1);
+    call->mwu_mq  = calc_mwu_bias2(bca->ref_mq,  bca->alt_mq,
+                                   bca->imq_ref_max+1,  bca->imq_alt_max+1);
+    call->mwu_bq  = calc_mwu_bias2(bca->ref_bq,  bca->alt_bq,
+                                   bca->ibq_ref_max+1,  bca->ibq_alt_max+1);
+    call->mwu_mqs = calc_mwu_bias2(bca->fwd_mqs, bca->rev_mqs,
+                                   bca->imq_fwd_max+1,  bca->imq_rev_max+1);
+#else
     call->mwu_pos = calc_mwu_bias(bca->ref_pos, bca->alt_pos, bca->npos);
     call->mwu_mq  = calc_mwu_bias(bca->ref_mq,  bca->alt_mq,  bca->nqual);
     call->mwu_bq  = calc_mwu_bias(bca->ref_bq,  bca->alt_bq,  bca->nqual);
     call->mwu_mqs = calc_mwu_bias(bca->fwd_mqs, bca->rev_mqs, bca->nqual);
+#endif
 
 #if CDF_MWU_TESTS
     call->mwu_pos_cdf = calc_mwu_bias_cdf(bca->ref_pos, bca->alt_pos, bca->npos);
@@ -691,6 +880,8 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
     call->mwu_mqs_cdf = calc_mwu_bias_cdf(bca->fwd_mqs, bca->rev_mqs, bca->nqual);
 #endif
 
+    // Very little to be gained out of using bca->epos_alt_max+1 instead.
+    //call->vdb = calc_vdb(bca->alt_pos, bca->epos_alt_max+1);
     call->vdb = calc_vdb(bca->alt_pos, bca->npos);
 
     return 0;

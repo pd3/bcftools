@@ -58,6 +58,11 @@ DEALINGS IN THE SOFTWARE.  */
 
 #define B2B_MAX_ALLELES 5
 
+// Seems minor variation either way.
+// We can save instructions by tracking the size of the arrays, but this doesn't
+// usually translate to fewer cycles due to waiting on memory fetches.
+//#define TRACK_EXTENTS
+
 typedef struct __bcf_callaux_t {
     int capQ, min_baseQ;
     int openQ, extQ, tandemQ; // for indels
@@ -66,6 +71,12 @@ typedef struct __bcf_callaux_t {
     int per_sample_flt; // indel filtering strategy
     int *ref_pos, *alt_pos, npos, *ref_mq, *alt_mq, *ref_bq, *alt_bq, *fwd_mqs, *rev_mqs, nqual; // for bias tests
     // for internal uses
+#ifdef TRACK_EXTENTS
+    int epos_ref_max, epos_alt_max;
+    int ibq_ref_max, ibq_alt_max;
+    int imq_ref_max, imq_alt_max;
+    int imq_fwd_max, imq_rev_max;
+#endif
     int max_bases;
     int indel_types[4];     // indel lengths
     int maxins, indelreg;
