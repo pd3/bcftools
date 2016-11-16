@@ -31,6 +31,7 @@ all: $(PROG) $(TEST_PROG)
 # Adjust $(HTSDIR) to point to your top-level htslib directory
 HTSDIR = ../htslib
 include $(HTSDIR)/htslib.mk
+include $(HTSDIR)/deps.mk
 HTSLIB = $(HTSDIR)/libhts.a
 BGZIP  = $(HTSDIR)/bgzip
 TABIX  = $(HTSDIR)/tabix
@@ -39,7 +40,7 @@ CC       = gcc
 CPPFLAGS =
 CFLAGS   = -g -Wall -Wc++-compat -O2
 LDFLAGS  =
-LIBS     =
+LIBS     = $(HTSLIB_LIBS)
 
 OBJS     = main.o vcfindex.o tabix.o \
            vcfstats.o vcfisec.o vcfmerge.o vcfquery.o vcffilter.o filter.o vcfsom.o \
