@@ -174,7 +174,7 @@ General changes:
 * Timestamps are now added to header lines summarising the command (#467).
 
 * Use of the `--threads` options should be faster across the board thanks to
-  changes in HTSlib meaning meaning threads are now shared by the compression
+  changes in HTSlib meaning threads are now shared by the compression
   and decompression calls.
 
 * Changes to genotype filtering with `-i, --include` and `-e, --exclude` (#454).
